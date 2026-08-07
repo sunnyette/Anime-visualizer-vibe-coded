@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>BPM Mobile Visualizer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
+    body {
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    #stage {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 1;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Enforce strict 4:3 aspect ratio centered on screen */
+    .vid-layer, canvas {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(100vw, calc(100vh * 4 / 3));
+      height: min(100vh, calc(100vw * 3 / 4));
+      aspect-ratio: 4 / 3;
+    }
+
+    .vid-layer {
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.1s linear;
+      z-index: 1;
+    }
+
+    .vid-layer.active {
+      opacity: 1;
+      z-index: 2;
+    }
+
+    /* Waveform canvas overlay locked to 4:3 with color inversion */
+    canvas {
+      z-index: 5;
+      pointer-events: none;
+      mix-blend-mode: difference;
+      opacity: 1;
+      transition: opacity 0.2s ease;
+    }
+
+    #ui-layer {
+      position: absolute;
+      z-index: 10;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(18, 18, 24, 0.92);
+      backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 20px;
+      padding: 24px;
+      width: 90%;
+      max-width: 420px;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.9);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    #ui-layer.hidden {
+      opacity: 0;
+      transform: translate(-50%, -45%);
+      pointer-events: none;
+    }
+
+    h1 { font-size: 1.4rem; margin-bottom: 15px; color: #107c41; text-align: center; }
+
+    .file-box {
+      background: #22222a;
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    label { display: block; font-size: 0.85rem; color: #bbb; margin-bottom: 6px; font-weight: 600; }
+
+    input[type="file"] {
+      width: 100%;
+      font-size: 0.85rem;
+      color: #ccc;
+    }
+
+    .slider-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 28px;
+      accent-color: #107c41;
+    }
+
+    button.btn-primary {
+      width: 100%;
+      padding: 16px;
+      background: #107c41;
+      border: none;
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: bold;
+      border-radius: 12px;
+      margin-top: 15px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(16, 124, 65, 0.4);
+    }
+
+    button.btn-secondary {
+      width: 100%;
+      padding: 10px;
+      background: rgba(255, 50, 50, 0.2);
+      border: 1px solid rgba(255, 50, 50, 0.4);
+      color: #ff8888;
+      font-size: 0.85rem;
+      font-weight: bold;
+      border-radius: 8px;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+
+    #toggle-ui-btn {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      z-index: 20;
+      background: rgba(0,0,0,0.6);
+      border: 1px solid rgba(255,255,255,0.3);
+      color: #fff;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #status-text {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #888;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="stage">
+    <video id="bg-video-1" class="vid-layer active" autoplay loop muted playsinline webkit-playsinline></video>
+    <video id="bg-video-2" class="vid-layer" autoplay loop muted playsinline webkit-playsinline></video>
+    <canvas id="wave-canvas"></canvas>
+  </div>
+
+  <button id="toggle-ui-btn">⚙️</button>
+
+  <div id="ui-layer">
+    <h1>BPM Mobile Visualizer</h1>
+
+    <div class="file-box">
+      <label>1. Music Track (.mp3, .wav, .m4a)</label>
+      <input type="file" id="audio-input" accept="audio/*">
+    </div>
+
+    <div class="file-box">
+      <label>2. Anime Video Clips (.mp4, .mov)</label>
+      <input type="file" id="video-input" accept="video/*" multiple>
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-label">
+        <span>Min Clip Duration (Hold Time)</span>
+        <span id="hold-val">1.8s</span>
+      </div>
+      <input type="range" id="hold-slider" min="0.8" max="4.0" step="0.1" value="1.8">
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-label">
+        <span>Beat Cut Sensitivity</span>
+        <span id="sens-val">150</span>
+      </div>
+      <input type="range" id="sens-slider" min="100" max="220" value="150">
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-label">
+        <span>Quiet Mode Threshold</span>
+        <span id="quiet-val">30</span>
+      </div>
+      <input type="range" id="quiet-slider" min="5" max="80" value="30">
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-label">
+        <span>Hide Visualizer Loudness Cutoff</span>
+        <span id="hide-val">160</span>
+      </div>
+      <input type="range" id="hide-slider" min="50" max="255" value="160">
+    </div>
+
+    <button id="start-btn" class="btn-primary">START / PAUSE</button>
+    <button id="clear-btn" class="btn-secondary">Clear Stored Media</button>
+    <div id="status-text">Checking saved files...</div>
+  </div>
+
+  <script>
+    let videoClips = [];
+    let recentClips = [];
+    let audioBuffer = null;
+    let rawAudioArrayBuffer = null;
+    let audioCtx = null;
+    let analyser = null;
+    let sourceNode = null;
+    let isPlaying = false;
+    let lastBeatTime = 0;
+    let smoothedEnergy = 0;
+    let smoothedBass = 0;
+
+    let videoA = document.getElementById('bg-video-1');
+    let videoB = document.getElementById('bg-video-2');
+    let activeVideo = videoA;
+    let inactiveVideo = videoB;
+    let isSwapping = false;
+
+    const canvas = document.getElementById('wave-canvas');
+    const ctx = canvas.getContext('2d');
+    const uiLayer = document.getElementById('ui-layer');
+    const startBtn = document.getElementById('start-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const toggleUiBtn = document.getElementById('toggle-ui-btn');
+    const statusText = document.getElementById('status-text');
+
+    const sensSlider = document.getElementById('sens-slider');
+    const quietSlider = document.getElementById('quiet-slider');
+    const hideSlider = document.getElementById('hide-slider');
+    const holdSlider = document.getElementById('hold-slider');
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    // --- INDEXEDDB MEDIA PERSISTENCE ---
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open('BPMVisualizerMediaDB', 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('audio')) db.createObjectStore('audio');
+          if (!db.objectStoreNames.contains('videos')) db.createObjectStore('videos', { autoIncrement: true });
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function saveAudioToStorage(file) {
+      const db = await openDB();
+      const tx = db.transaction('audio', 'readwrite');
+      tx.objectStore('audio').put(file, 'currentTrack');
+    }
+
+    async function saveVideosToStorage(files) {
+      const db = await openDB();
+      const tx = db.transaction('videos', 'readwrite');
+      const store = tx.objectStore('videos');
+      store.clear();
+      for (const file of files) {
+        store.add(file);
+      }
+    }
+
+    async function loadSavedMedia() {
+      try {
+        const db = await openDB();
+
+        // 1. Load Stored Audio
+        const audioTx = db.transaction('audio', 'readonly');
+        const audioReq = audioTx.objectStore('audio').get('currentTrack');
+        audioReq.onsuccess = async () => {
+          if (audioReq.result) {
+            const file = audioReq.result;
+            rawAudioArrayBuffer = await file.arrayBuffer();
+            audioBuffer = null;
+            statusText.innerText = "Saved audio loaded! Ready to start.";
+          } else {
+            statusText.innerText = "Select files from your phone to begin.";
+          }
+        };
+
+        // 2. Load Stored Videos
+        const videoTx = db.transaction('videos', 'readonly');
+        const videoReq = videoTx.objectStore('videos').getAll();
+        videoReq.onsuccess = () => {
+          if (videoReq.result && videoReq.result.length > 0) {
+            const files = videoReq.result;
+            videoClips = files.map(file => URL.createObjectURL(file));
+            activeVideo.src = videoClips[0];
+            recentClips = [videoClips[0]];
+            activeVideo.muted = true;
+            activeVideo.play().catch(() => {});
+            activeVideo.classList.add('active');
+            statusText.innerText += ` Loaded ${files.length} video(s).`;
+            resizeCanvas();
+          }
+        };
+      } catch (err) {
+        console.warn("Could not load stored media:", err);
+        statusText.innerText = "Select files from your phone to begin.";
+      }
+    }
+
+    async function clearStorage() {
+      try {
+        const db = await openDB();
+        const tx1 = db.transaction('audio', 'readwrite');
+        tx1.objectStore('audio').clear();
+        const tx2 = db.transaction('videos', 'readwrite');
+        tx2.objectStore('videos').clear();
+
+        videoClips = [];
+        recentClips = [];
+        rawAudioArrayBuffer = null;
+        audioBuffer = null;
+        stopAudio();
+        activeVideo.src = '';
+        inactiveVideo.src = '';
+        activeVideo.classList.remove('active');
+        inactiveVideo.classList.remove('active');
+        statusText.innerText = "Cleared all saved media.";
+      } catch(e) {
+        console.error("Error clearing storage:", e);
+      }
+    }
+
+    // --- FILE SELECTION ---
+    document.getElementById('video-input').addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length > 0) {
+        videoClips = files.map(file => URL.createObjectURL(file));
+        activeVideo.src = videoClips[0];
+        recentClips = [videoClips[0]];
+        activeVideo.muted = true;
+        activeVideo.play().catch(() => {});
+        activeVideo.classList.add('active');
+        statusText.innerText = `Loaded ${files.length} video clip(s)`;
+        resizeCanvas();
+        await saveVideosToStorage(files);
+      }
+    });
+
+    document.getElementById('audio-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      statusText.innerText = "Loading audio file...";
+      rawAudioArrayBuffer = await file.arrayBuffer();
+      audioBuffer = null;
+      statusText.innerText = "Audio ready! Press START";
+      await saveAudioToStorage(file);
+    });
+
+    // --- PLAYBACK CONTROL ---
+    async function togglePlay() {
+      if (!rawAudioArrayBuffer && !audioBuffer) {
+        alert("Please load a song file first!");
+        return;
+      }
+
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+
+      if (!audioBuffer && rawAudioArrayBuffer) {
+        statusText.innerText = "Decoding audio...";
+        audioBuffer = await audioCtx.decodeAudioData(rawAudioArrayBuffer.slice(0));
+      }
+
+      if (isPlaying) {
+        stopAudio();
+        statusText.innerText = "Paused";
+        return;
+      }
+
+      startAudio();
+    }
+
+    function startAudio() {
+      if (sourceNode) {
+        try { sourceNode.stop(); } catch(e) {}
+      }
+
+      sourceNode = audioCtx.createBufferSource();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+
+      sourceNode.buffer = audioBuffer;
+      sourceNode.connect(analyser);
+      analyser.connect(audioCtx.destination);
+
+      sourceNode.onended = () => {
+        isPlaying = false;
+        statusText.innerText = "Finished. Press START to replay.";
+      };
+
+      sourceNode.start(0);
+      isPlaying = true;
+
+      uiLayer.classList.add('hidden');
+      statusText.innerText = "Playing...";
+
+      resizeCanvas();
+      renderFrame();
+    }
+
+    function stopAudio() {
+      isPlaying = false;
+      if (sourceNode) {
+        try { sourceNode.stop(); } catch(e) {}
+        sourceNode = null;
+      }
+    }
+
+    // --- CLIP SWITCHER ---
+    function switchVideoClip() {
+      if (videoClips.length === 0 || isSwapping) return;
+
+      let availableClips = videoClips.filter(clip => !recentClips.includes(clip));
+
+      if (availableClips.length === 0) {
+        availableClips = videoClips.filter(clip => clip !== activeVideo.src);
+        if (availableClips.length === 0) availableClips = videoClips;
+      }
+
+      const nextClip = availableClips[Math.floor(Math.random() * availableClips.length)];
+
+      recentClips.push(nextClip);
+      if (recentClips.length > 3) {
+        recentClips.shift();
+      }
+
+      isSwapping = true;
+      inactiveVideo.muted = true;
+
+      const performVisualSwap = () => {
+        inactiveVideo.classList.add('active');
+        activeVideo.classList.remove('active');
+
+        let temp = activeVideo;
+        activeVideo = inactiveVideo;
+        inactiveVideo = temp;
+        isSwapping = false;
+      };
+
+      const prepareAndPlay = () => {
+        if (inactiveVideo.duration && inactiveVideo.duration > 1.5) {
+          inactiveVideo.currentTime = Math.random() * (inactiveVideo.duration - 1.5) + 0.5;
+        }
+
+        const onReadyToReveal = () => {
+          inactiveVideo.removeEventListener('playing', onReadyToReveal);
+          inactiveVideo.removeEventListener('seeked', onReadyToReveal);
+          performVisualSwap();
+        };
+
+        inactiveVideo.addEventListener('playing', onReadyToReveal, { once: true });
+        inactiveVideo.addEventListener('seeked', onReadyToReveal, { once: true });
+
+        inactiveVideo.play().catch(() => {
+          isSwapping = false;
+        });
+
+        setTimeout(() => {
+          if (isSwapping) performVisualSwap();
+        }, 150);
+      };
+
+      if (inactiveVideo.src !== nextClip) {
+        inactiveVideo.src = nextClip;
+        inactiveVideo.onloadeddata = () => {
+          inactiveVideo.onloadeddata = null;
+          prepareAndPlay();
+        };
+      } else {
+        prepareAndPlay();
+      }
+    }
+
+    // --- RENDER LOOP ---
+    function renderFrame() {
+      if (!isPlaying || !analyser) return;
+
+      const freqData = new Uint8Array(analyser.frequencyBinCount);
+      const timeData = new Uint8Array(analyser.fftSize);
+
+      analyser.getByteFrequencyData(freqData);
+      analyser.getByteTimeDomainData(timeData);
+
+      let totalEnergy = 0;
+      for (let i = 0; i < freqData.length; i++) totalEnergy += freqData[i];
+      const avgEnergy = totalEnergy / freqData.length;
+      smoothedEnergy += (avgEnergy - smoothedEnergy) * 0.1;
+
+      const quietThreshold = parseInt(quietSlider.value, 10);
+      const hideThreshold = parseInt(hideSlider.value, 10);
+      const beatThreshold = parseInt(sensSlider.value, 10);
+      const minHoldMs = parseFloat(holdSlider.value) * 1000;
+
+      if (smoothedEnergy >= hideThreshold) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      } else if (smoothedEnergy < quietThreshold) {
+        drawRoundVisualizer(timeData);
+      } else {
+        drawSharpVisualizer(timeData);
+      }
+
+      const bassEnergy = (freqData[1] + freqData[2] + freqData[3] + freqData[4]) / 4;
+      smoothedBass += (bassEnergy - smoothedBass) * 0.05;
+
+      const now = performance.now();
+      const timeSinceLastBeat = now - lastBeatTime;
+      const isTrueSpike = bassEnergy > (smoothedBass * 1.2);
+
+      if (smoothedEnergy >= quietThreshold && timeSinceLastBeat > minHoldMs && (bassEnergy > beatThreshold || (isTrueSpike && bassEnergy > 90))) {
+        lastBeatTime = now;
+        switchVideoClip();
+      }
+
+      requestAnimationFrame(renderFrame);
+    }
+
+    function drawRoundVisualizer(dataArray) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const baseRadius = Math.min(canvas.width, canvas.height) * 0.22;
+      const numPoints = dataArray.length;
+
+      const points = [];
+      for (let i = 0; i < numPoints; i++) {
+        const angle = (i / numPoints) * Math.PI * 2 - Math.PI / 2;
+        const v = (dataArray[i] - 128) / 128.0; 
+        const r = baseRadius + (v * baseRadius * 0.55);
+        points.push({
+          x: centerX + Math.cos(angle) * r,
+          y: centerY + Math.sin(angle) * r
+        });
+      }
+
+      if (points.length === 0) return;
+
+      ctx.beginPath();
+      let lastPt = points[points.length - 1];
+      let firstMidX = (lastPt.x + points[0].x) / 2;
+      let firstMidY = (lastPt.y + points[0].y) / 2;
+      ctx.moveTo(firstMidX, firstMidY);
+
+      for (let i = 0; i < points.length; i++) {
+        const p1 = points[i];
+        const p2 = points[(i + 1) % points.length];
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+        ctx.quadraticCurveTo(p1.x, p1.y, midX, midY);
+      }
+
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    function drawSharpVisualizer(dataArray) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineCap = 'square';
+      ctx.lineJoin = 'miter';
+
+      ctx.beginPath();
+      const sliceWidth = canvas.width / dataArray.length;
+      let x = 0;
+
+      for (let i = 0; i < dataArray.length; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = (v * canvas.height) / 2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        x += sliceWidth;
+      }
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+    }
+
+    // --- EVENT BINDINGS ---
+    startBtn.addEventListener('click', togglePlay);
+    clearBtn.addEventListener('click', clearStorage);
+    toggleUiBtn.addEventListener('click', () => uiLayer.classList.toggle('hidden'));
+    sensSlider.addEventListener('input', (e) => document.getElementById('sens-val').innerText = e.target.value);
+    quietSlider.addEventListener('input', (e) => document.getElementById('quiet-val').innerText = e.target.value);
+    hideSlider.addEventListener('input', (e) => document.getElementById('hide-val').innerText = e.target.value);
+    holdSlider.addEventListener('input', (e) => document.getElementById('hold-val').innerText = `${e.target.value}s`);
+
+    // Initialization
+    resizeCanvas();
+    loadSavedMedia();
+  </script>
+</body>
+</html>
