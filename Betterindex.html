@@ -1,1 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>BPM Mobile Visualizer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
+    body {
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    #stage {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 1;
+    }
+
+    .vid-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.15s ease-in-out;
+    }
+
+    .vid-layer.active {
+      opacity: 1;
+    }
+
+    /* Waveform canvas overlay with color inversion */
+    canvas {
+      position: absolute;
+      top: 0; 
+      left: 0; 
+      width: 100%; 
+      height: 100%;
+      z-index: 5;
+      pointer-events: none;
+      mix-blend-mode: difference; /* Inverts waveform color against video background */
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+
+    #ui-layer {
+      position: absolute;
+      z-index: 10;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(18, 18, 24, 0.92);
+      backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 20px;
+      padding: 24px;
+      width: 90%;
+      max-width: 420px;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.9);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    #ui-layer.hidden {
+      opacity: 0;
+      transform: translate(-50%, -45%);
+      pointer-events: none;
+    }
+
+    h1 { font-size: 1.4rem; margin-bottom: 15px; color: #107c41; text-align: center; }
+
+    .file-box {
+      background: #22222a;
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    label { display: block; font-size: 0.85rem; color: #bbb; margin-bottom: 6px; font-weight: 600; }
+
+    input[type="file"] {
+      width: 100%;
+      font-size: 0.85rem;
+      color: #ccc;
+    }
+
+    .slider-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 28px;
+      accent-color: #107c41;
+    }
+
+    button.btn-primary {
+      width: 100%;
+      padding: 16px;
+      background: #107c41;
+      border: none;
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: bold;
+      border-radius: 12px;
+      margin-top: 15px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(16, 124, 65, 0.4);
+    }
+
+    #toggle-ui-btn {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      z-index: 20;
+      background: rgba(0,0,0,0.6);
+      border: 1px solid rgba(255,255,255,0.3);
+      color: #fff;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #status-text {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #888;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="stage">
+    <video id="bg-video-1" class="vid-layer active" autoplay loop muted playsinline webkit-playsinline></video>
+    <video id="bg-video-2" class="vid-layer" autoplay loop muted playsinline webkit-playsinline></video>
+    <canvas id="wave-canvas"></canvas>
+  </div>
+
+  <button id="toggle-ui-btn">⚙️</button>
+
+  <div id="ui-layer">
+    <h1>BPM Mobile Visualizer</h1>
+
+    <div class="file-box">
+      <label>1. Music Track (.mp3, .wav, .m4a)</label>
+      <input type="file" id="audio-input" accept="audio/*">
+    </div>
+
+    <div class="file-box">
+      <label>2. Anime Video Clips (.mp4, .mov)</label>
+      <input type="file" id="video-input" accept="video/*" multiple>
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-label">
+        <span>Min Clip Duration (Hold Time)</span>
+        <span id="hold-val">1.8s</span>
+      </div>
+      <input type="range" id="hold-slider" min="0.8" max="4.0" step="0.1" value="1.8">
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-label">
+        <span>Beat Cut Sensitivity</span>
+        <span id="sens-val">190</span>
+      </div>
+      <input type="range" id="sens-slider" min="140" max="230" value="190">
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-label">
+        <span>Quiet Mode Threshold</span>
+        <span id="quiet-val">30</span>
+      </div>
+      <input type="range" id="quiet-slider" min="5" max="80" value="30">
+    </div>
+
+    <button id="start-btn" class="btn-primary">START / PAUSE</button>
+    <div id="status-text">Select files from your phone to begin</div>
+  </div>
+
+  <script>
+    let videoClips = [];
+    let audioBuffer = null;
+    let audioCtx, analyser, sourceNode;
+    let isPlaying = false;
+    let lastBeatTime = 0;
+    let smoothedEnergy = 0;
+    let smoothedBass = 0;
+
+    let videoA = document.getElementById('bg-video-1');
+    let videoB = document.getElementById('bg-video-2');
+    let activeVideo = videoA;
+    let inactiveVideo = videoB;
+
+    const canvas = document.getElementById('wave-canvas');
+    const ctx = canvas.getContext('2d');
+    const uiLayer = document.getElementById('ui-layer');
+    const startBtn = document.getElementById('start-btn');
+    const toggleUiBtn = document.getElementById('toggle-ui-btn');
+    const statusText = document.getElementById('status-text');
+
+    const sensSlider = document.getElementById('sens-slider');
+    const quietSlider = document.getElementById('quiet-slider');
+    const holdSlider = document.getElementById('hold-slider');
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // 1. File Selection
+    document.getElementById('video-input').addEventListener('change', (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length > 0) {
+        videoClips = files.map(file => URL.createObjectURL(file));
+        activeVideo.src = videoClips[0];
+        activeVideo.classList.add('active');
+        statusText.innerText = `Loaded ${files.length} video clip(s)`;
+      }
+    });
+
+    document.getElementById('audio-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      statusText.innerText = "Decoding audio file...";
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const arrayBuffer = await file.arrayBuffer();
+      audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      statusText.innerText = "Audio loaded! Press START";
+    });
+
+    // 2. Playback Control
+    async function togglePlay() {
+      if (!audioBuffer) {
+        alert("Please load a song file first!");
+        return;
+      }
+
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+
+      if (isPlaying) {
+        sourceNode.stop();
+        isPlaying = false;
+        statusText.innerText = "Paused";
+        return;
+      }
+
+      sourceNode = audioCtx.createBufferSource();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+
+      sourceNode.buffer = audioBuffer;
+      sourceNode.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      sourceNode.start(0);
+
+      isPlaying = true;
+      uiLayer.classList.add('hidden');
+      statusText.innerText = "Playing...";
+
+      renderFrame();
+    }
+
+    // Double-buffered Seamless Cue Switcher
+    function switchVideoClip() {
+      if (videoClips.length === 0) return;
+
+      const nextClip = videoClips[Math.floor(Math.random() * videoClips.length)];
+
+      if (inactiveVideo.src !== nextClip) {
+        inactiveVideo.src = nextClip;
+      }
+
+      const executeJump = () => {
+        if (inactiveVideo.duration && inactiveVideo.duration > 1) {
+          inactiveVideo.currentTime = Math.random() * (inactiveVideo.duration - 1.5) + 0.5;
+        }
+
+        inactiveVideo.play().then(() => {
+          inactiveVideo.classList.add('active');
+          activeVideo.classList.remove('active');
+
+          let temp = activeVideo;
+          activeVideo = inactiveVideo;
+          inactiveVideo = temp;
+        }).catch(() => {});
+      };
+
+      if (inactiveVideo.readyState >= 1) {
+        executeJump();
+      } else {
+        inactiveVideo.onloadedmetadata = () => {
+          inactiveVideo.onloadedmetadata = null;
+          executeJump();
+        };
+      }
+    }
+
+    // 3. Audio & Beat Processing Loop
+    function renderFrame() {
+      if (!isPlaying) return;
+
+      const freqData = new Uint8Array(analyser.frequencyBinCount);
+      const timeData = new Uint8Array(analyser.fftSize);
+
+      analyser.getByteFrequencyData(freqData);
+      analyser.getByteTimeDomainData(timeData);
+
+      // Measure Overall Song Volume
+      let totalEnergy = 0;
+      for (let i = 0; i < freqData.length; i++) totalEnergy += freqData[i];
+      const avgEnergy = totalEnergy / freqData.length;
+      smoothedEnergy += (avgEnergy - smoothedEnergy) * 0.1;
+
+      const quietThreshold = parseInt(quietSlider.value, 10);
+      const beatThreshold = parseInt(sensSlider.value, 10);
+      const minHoldMs = parseFloat(holdSlider.value) * 1000;
+
+      if (smoothedEnergy < quietThreshold) {
+        // Quiet section: show overlay visualizer over the unaltered background video
+        canvas.style.opacity = '1.0';
+        drawWaveform(timeData);
+      } else {
+        // Loud section: hide overlay visualizer, trigger beat cuts
+        canvas.style.opacity = '0.0';
+
+        // Dynamic Bass Peak Detection
+        const bassEnergy = (freqData[1] + freqData[2] + freqData[3] + freqData[4]) / 4;
+        smoothedBass += (bassEnergy - smoothedBass) * 0.05;
+
+        const now = performance.now();
+        const timeSinceLastBeat = now - lastBeatTime;
+        const isTrueSpike = bassEnergy > (smoothedBass * 1.35);
+
+        if (timeSinceLastBeat > minHoldMs && bassEnergy > beatThreshold && isTrueSpike) {
+          lastBeatTime = now;
+          switchVideoClip();
+        }
+      }
+
+      requestAnimationFrame(renderFrame);
+    }
+
+    function drawWaveform(dataArray) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#ffffff'; // White stroke required for mix-blend-mode: difference
+
+      ctx.beginPath();
+      const sliceWidth = canvas.width / dataArray.length;
+      let x = 0;
+
+      for (let i = 0; i < dataArray.length; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = (v * canvas.height) / 2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        x += sliceWidth;
+      }
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+    }
+
+    // Event Bindings
+    startBtn.addEventListener('click', togglePlay);
+    toggleUiBtn.addEventListener('click', () => uiLayer.classList.toggle('hidden'));
+    sensSlider.addEventListener('input', (e) => document.getElementById('sens-val').innerText = e.target.value);
+    quietSlider.addEventListener('input', (e) => document.getElementById('quiet-val').innerText = e.target.value);
+    holdSlider.addEventListener('input', (e) => document.getElementById('hold-val').innerText = `${e.target.value}s`);
+  </script>
+</body>
+</html>
 
