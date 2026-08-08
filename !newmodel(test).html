@@ -1,0 +1,2363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sunnys Visualizer</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    body {
+      background-color: #0d0f12;
+      color: #e2e8f0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    .crt-overlay {
+      background:
+        linear-gradient(
+          rgba(18, 16, 16, 0) 50%,
+          rgba(0, 0, 0, 0.25) 50%
+        ),
+        linear-gradient(
+          90deg,
+          rgba(255, 0, 0, 0.06),
+          rgba(0, 255, 0, 0.02),
+          rgba(0, 0, 255, 0.06)
+        );
+      background-size: 100% 3px, 6px 100%;
+      pointer-events: none;
+    }
+
+    input[type=range] {
+      accent-color: #06b6d4;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+
+<body class="h-screen w-screen relative overflow-hidden bg-black select-none">
+
+  <!-- =========================================================
+       DISPLAY
+       ========================================================= -->
+
+  <div
+    id="visualizer-container"
+    class="relative w-full h-full flex items-center justify-center bg-black"
+  >
+    <!-- These remain hidden visually.
+         They are used as the source frames for the master canvas. -->
+    <video
+      id="video-a"
+      class="absolute inset-0 w-full h-full object-cover opacity-0 pointer-events-none"
+      playsinline
+      muted
+      loop
+    ></video>
+
+    <video
+      id="video-b"
+      class="absolute inset-0 w-full h-full object-cover opacity-0 pointer-events-none"
+      playsinline
+      muted
+      loop
+    ></video>
+
+    <!-- MASTER DISPLAY / RECORDING SURFACE -->
+    <canvas
+      id="visualizer-canvas"
+      class="absolute inset-0 w-full h-full z-10"
+    ></canvas>
+
+    <!-- CRT is now rendered onto the canvas too -->
+    <div
+      id="crt-overlay"
+      class="absolute inset-0 crt-overlay z-20 pointer-events-none"
+    ></div>
+  </div>
+
+
+  <!-- =========================================================
+       HEADER
+       ========================================================= -->
+
+  <header
+    class="absolute top-0 left-0 right-0 z-30 p-4 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent"
+  >
+    <div class="flex items-center space-x-3">
+      <h1
+        id="app-title"
+        class="text-xl font-extrabold tracking-wider text-cyan-400 drop-shadow-md"
+      >
+        Sunnys Visualizer
+      </h1>
+
+      <span
+        class="text-xs bg-cyan-950 text-cyan-300 border border-cyan-800 px-2 py-0.5 rounded-full font-mono"
+      >
+        v2.1
+      </span>
+    </div>
+
+    <div class="flex items-center space-x-3">
+
+      <div
+        class="hidden sm:flex items-center bg-gray-900/80 backdrop-blur border border-gray-800 px-3 py-1 rounded-lg space-x-3 font-mono text-xs"
+      >
+        <div>
+          BPM:
+          <span
+            id="bpm-display"
+            class="text-cyan-400 font-bold"
+          >120</span>
+        </div>
+
+        <div class="text-gray-600">|</div>
+
+        <div>
+          BEAT:
+          <span
+            id="beat-indicator"
+            class="inline-block w-2 h-2 rounded-full bg-red-500 transition-all duration-75"
+          ></span>
+        </div>
+      </div>
+
+      <button
+        id="tap-tempo-btn"
+        class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs px-3 py-2 rounded-lg border border-cyan-400/30 transition shadow-lg active:scale-95"
+      >
+        TAP TEMPO
+      </button>
+
+      <button
+        id="options-toggle-btn"
+        class="bg-gray-800/90 hover:bg-gray-700 text-white p-2 rounded-lg border border-gray-700 backdrop-blur transition shadow-lg active:scale-95"
+        title="Toggle Settings (Hotkey: H)"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31.826-2.37-2.37a1.724 1.724 0 001.065-2.572c1.756-.426 1.756-2.924 0-3.35a1.724 1.724 0 00-1.066-2.573c-.94 1.543.826 3.31 2.37 2.37.996-.608 2.296-.07 2.572-1.065z"
+          />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+          />
+        </svg>
+      </button>
+    </div>
+  </header>
+
+
+  <!-- =========================================================
+       SETTINGS PANEL
+       ========================================================= -->
+
+  <aside
+    id="options-panel"
+    class="hidden absolute top-16 right-4 z-40 w-80 max-h-[85vh] bg-gray-900/95 backdrop-blur-md border border-gray-800 text-white rounded-2xl p-5 shadow-2xl overflow-y-auto no-scrollbar space-y-5 text-sm"
+  >
+
+    <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+      <h2 class="font-bold text-gray-200">
+        Controls & Config
+        <span class="text-[10px] text-gray-400 font-normal">
+          (Press 'H' to hide)
+        </span>
+      </h2>
+
+      <button
+        id="close-panel-btn"
+        class="text-gray-400 hover:text-white"
+      >
+        &times;
+      </button>
+    </div>
+
+
+    <!-- AUDIO -->
+
+    <div class="space-y-2">
+      <label class="block font-semibold text-xs text-gray-400 uppercase tracking-wider">
+        Audio Source
+      </label>
+
+      <input
+        type="file"
+        id="audio-file-input"
+        accept="audio/*"
+        class="w-full text-xs text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-cyan-950 file:text-cyan-300 hover:file:bg-cyan-900 cursor-pointer"
+      />
+
+      <div class="flex items-center space-x-2 pt-1">
+
+        <button
+          id="play-pause-btn"
+          class="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white py-1.5 rounded-lg font-bold text-xs transition"
+        >
+          Play Audio
+        </button>
+
+        <button
+          id="mic-btn"
+          class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold transition"
+        >
+          Mic Input
+        </button>
+
+      </div>
+    </div>
+
+
+    <!-- VIDEOS -->
+
+    <div class="space-y-2">
+      <label class="block font-semibold text-xs text-gray-400 uppercase tracking-wider">
+        Video Clips
+      </label>
+
+      <input
+        type="file"
+        id="video-files-input"
+        accept="video/*"
+        multiple
+        class="w-full text-xs text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-cyan-950 file:text-cyan-300 hover:file:bg-cyan-900 cursor-pointer"
+      />
+
+      <div class="text-xs text-gray-500">
+        Loaded Videos:
+        <span
+          id="video-count"
+          class="text-cyan-400 font-bold"
+        >0</span>
+      </div>
+    </div>
+
+
+    <!-- VISUALIZER -->
+
+    <div class="space-y-2">
+      <label class="block font-semibold text-xs text-gray-400 uppercase tracking-wider">
+        Visualizer Overlay
+      </label>
+
+      <select
+        id="visualizer-mode"
+        class="w-full bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-700 text-xs focus:ring-1 focus:ring-cyan-500 outline-none"
+      >
+        <option value="smooth-line" selected>Smooth Line</option>
+        <option value="smooth-ring">Smooth Ring</option>
+        <option value="sharp-line">Sharp Line</option>
+        <option value="spectrum-bars">Spectrum Bars</option>
+        <option value="none">Disabled</option>
+      </select>
+    </div>
+
+
+    <!-- QUANTIZATION -->
+
+    <div class="space-y-2">
+      <label class="block font-semibold text-xs text-gray-400 uppercase tracking-wider">
+        Beat Cut Quantization
+      </label>
+
+      <div class="grid grid-cols-4 gap-1.5">
+        <button data-sync="1" class="sync-btn bg-cyan-600 text-white py-1 rounded text-xs font-bold">
+          1 Beat
+        </button>
+
+        <button data-sync="2" class="sync-btn bg-gray-800 hover:bg-gray-700 text-gray-300 py-1 rounded text-xs font-bold">
+          2 Beats
+        </button>
+
+        <button data-sync="4" class="sync-btn bg-gray-800 hover:bg-gray-700 text-gray-300 py-1 rounded text-xs font-bold">
+          4 Beats
+        </button>
+
+        <button data-sync="8" class="sync-btn bg-gray-800 hover:bg-gray-700 text-gray-300 py-1 rounded text-xs font-bold">
+          8 Beats
+        </button>
+      </div>
+    </div>
+
+
+    <!-- METERS -->
+
+    <div class="space-y-4 pt-2 border-t border-gray-800">
+
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-gray-300">
+            Pause Cuts Below Vol
+          </span>
+
+          <span class="text-cyan-400 font-mono font-bold">
+            <span id="quiet-val">15</span>%
+          </span>
+        </div>
+
+        <input
+          type="range"
+          id="quiet-slider"
+          min="0"
+          max="100"
+          value="15"
+          class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer"
+        >
+      </div>
+
+
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-gray-300">
+            Hide Visualizer Above Vol
+          </span>
+
+          <span class="text-cyan-400 font-mono font-bold">
+            <span id="hide-val">85</span>%
+          </span>
+        </div>
+
+        <input
+          type="range"
+          id="hide-slider"
+          min="0"
+          max="100"
+          value="85"
+          class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer"
+        >
+      </div>
+
+
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-gray-300">
+            Bass Energy Threshold
+          </span>
+
+          <span class="text-cyan-400 font-mono font-bold">
+            <span id="sens-val">140</span>
+          </span>
+        </div>
+
+        <input
+          type="range"
+          id="sens-slider"
+          min="20"
+          max="255"
+          value="140"
+          class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer"
+        >
+      </div>
+
+
+      <!-- NEW: MINIMUM CLIP DURATION -->
+
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-gray-300">
+            Minimum Clip Duration
+          </span>
+
+          <span class="text-cyan-400 font-mono font-bold">
+            <span id="min-clip-val">2.0</span>s
+          </span>
+        </div>
+
+        <input
+          type="range"
+          id="min-clip-slider"
+          min="0"
+          max="20"
+          step="0.5"
+          value="2"
+          class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer"
+        >
+      </div>
+
+    </div>
+
+
+    <!-- PERFORMANCE -->
+
+    <div class="space-y-2 pt-2 border-t border-gray-800">
+
+      <div class="flex space-x-2">
+
+        <button
+          id="hold-video-btn"
+          class="flex-1 bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-800/50 py-2 rounded-lg text-xs font-bold transition"
+        >
+          LOCK CURRENT CLIP
+        </button>
+
+        <button
+          id="manual-switch-btn"
+          class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 py-2 rounded-lg text-xs font-bold transition"
+        >
+          CUT NEXT CLIP
+        </button>
+
+      </div>
+
+
+      <button
+        id="record-btn"
+        class="w-full bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800/50 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-2"
+      >
+        <span
+          id="record-dot"
+          class="w-2 h-2 rounded-full bg-red-500"
+        ></span>
+
+        <span id="record-text">
+          Start Canvas Recording
+        </span>
+      </button>
+
+    </div>
+
+  </aside>
+
+
+  <!-- =========================================================
+       JAVASCRIPT
+       ========================================================= -->
+
+  <script>
+    (() => {
+
+      /* =======================================================
+         DATABASE
+         ======================================================= */
+
+      const DB_NAME = "SunnysVisualizerDB";
+      const DB_VERSION = 2;
+
+      let db = null;
+
+      function openDB() {
+        return new Promise((resolve, reject) => {
+
+          const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+          request.onupgradeneeded = (event) => {
+            const database = event.target.result;
+
+            if (!database.objectStoreNames.contains("videos")) {
+              database.createObjectStore("videos", {
+                keyPath: "id",
+                autoIncrement: true
+              });
+            }
+
+            if (!database.objectStoreNames.contains("audios")) {
+              database.createObjectStore("audios", {
+                keyPath: "id",
+                autoIncrement: true
+              });
+            }
+          };
+
+          request.onsuccess = (event) => {
+            db = event.target.result;
+            resolve(db);
+          };
+
+          request.onerror = () => {
+            reject(request.error);
+          };
+        });
+      }
+
+
+      function saveFiles(storeName, files) {
+
+        if (!db || !files.length) return;
+
+        return new Promise((resolve, reject) => {
+
+          const transaction = db.transaction(storeName, "readwrite");
+          const store = transaction.objectStore(storeName);
+
+          files.forEach(file => {
+            store.add({
+              name: file.name,
+              type: file.type,
+              blob: file
+            });
+          });
+
+          transaction.oncomplete = resolve;
+          transaction.onerror = () => reject(transaction.error);
+        });
+      }
+
+
+      /* =======================================================
+         ELEMENTS
+         ======================================================= */
+
+      const canvas = document.getElementById("visualizer-canvas");
+      const ctx = canvas.getContext("2d");
+
+      const videoA = document.getElementById("video-a");
+      const videoB = document.getElementById("video-b");
+
+      const optionsBtn =
+        document.getElementById("options-toggle-btn");
+
+      const optionsPanel =
+        document.getElementById("options-panel");
+
+      const closePanelBtn =
+        document.getElementById("close-panel-btn");
+
+      const tapTempoBtn =
+        document.getElementById("tap-tempo-btn");
+
+      const bpmDisplay =
+        document.getElementById("bpm-display");
+
+      const beatIndicator =
+        document.getElementById("beat-indicator");
+
+      const quietSlider =
+        document.getElementById("quiet-slider");
+
+      const hideSlider =
+        document.getElementById("hide-slider");
+
+      const sensSlider =
+        document.getElementById("sens-slider");
+
+      const minClipSlider =
+        document.getElementById("min-clip-slider");
+
+      const quietVal =
+        document.getElementById("quiet-val");
+
+      const hideVal =
+        document.getElementById("hide-val");
+
+      const sensVal =
+        document.getElementById("sens-val");
+
+      const minClipVal =
+        document.getElementById("min-clip-val");
+
+      const playPauseBtn =
+        document.getElementById("play-pause-btn");
+
+      const micBtn =
+        document.getElementById("mic-btn");
+
+      const audioFileInput =
+        document.getElementById("audio-file-input");
+
+      const videoFilesInput =
+        document.getElementById("video-files-input");
+
+      const videoCount =
+        document.getElementById("video-count");
+
+      const visualizerModeSelect =
+        document.getElementById("visualizer-mode");
+
+      const holdVideoBtn =
+        document.getElementById("hold-video-btn");
+
+      const manualSwitchBtn =
+        document.getElementById("manual-switch-btn");
+
+      const recordBtn =
+        document.getElementById("record-btn");
+
+      const recordText =
+        document.getElementById("record-text");
+
+
+      /* =======================================================
+         STATE
+         ======================================================= */
+
+      let activeVideo = videoA;
+      let inactiveVideo = videoB;
+
+      let videoClips = [];
+      let videoObjectUrls = [];
+
+      let currentClipIndex = -1;
+
+      let holdCurrentVideo = false;
+
+      let lastVideoSwitchAudioTime = -Infinity;
+
+      let audioCtx = null;
+      let analyserNode = null;
+
+      let audioSourceNode = null;
+      let micSourceNode = null;
+      let micStream = null;
+
+      let audioElement = new Audio();
+
+      let frequencyDataArray = null;
+      let timeDomainDataArray = null;
+
+      let isPlaying = false;
+      let usingMic = false;
+
+      let bpm = 120;
+      let beatIntervalSeconds = 60 / bpm;
+
+      let beatCount = 0;
+      let lastBeatIndex = -1;
+
+      let tapTimes = [];
+
+      let syncBeatInterval = 1;
+
+      let mediaRecorder = null;
+      let recordedChunks = [];
+      let isRecording = false;
+
+
+      /* =======================================================
+         CANVAS
+         ======================================================= */
+
+      function resizeCanvas() {
+        const dpr = window.devicePixelRatio || 1;
+
+        canvas.width =
+          Math.floor(window.innerWidth * dpr);
+
+        canvas.height =
+          Math.floor(window.innerHeight * dpr);
+
+        canvas.style.width =
+          window.innerWidth + "px";
+
+        canvas.style.height =
+          window.innerHeight + "px";
+
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      window.addEventListener("resize", resizeCanvas);
+      resizeCanvas();
+
+
+      /* =======================================================
+         UI
+         ======================================================= */
+
+      optionsBtn.addEventListener("click", () => {
+        optionsPanel.classList.toggle("hidden");
+      });
+
+      closePanelBtn.addEventListener("click", () => {
+        optionsPanel.classList.add("hidden");
+      });
+
+
+      window.addEventListener("keydown", event => {
+
+        if (
+          ["INPUT", "TEXTAREA", "SELECT"].includes(
+            document.activeElement.tagName
+          )
+        ) {
+          return;
+        }
+
+        if (event.key.toLowerCase() === "h") {
+          optionsPanel.classList.toggle("hidden");
+        }
+      });
+
+
+      quietSlider.addEventListener("input", event => {
+        quietVal.textContent = event.target.value;
+      });
+
+      hideSlider.addEventListener("input", event => {
+        hideVal.textContent = event.target.value;
+      });
+
+      sensSlider.addEventListener("input", event => {
+        sensVal.textContent = event.target.value;
+      });
+
+      minClipSlider.addEventListener("input", event => {
+        minClipVal.textContent =
+          Number(event.target.value).toFixed(1);
+      });
+
+
+      /* =======================================================
+         QUANTIZATION
+         ======================================================= */
+
+      document.querySelectorAll(".sync-btn").forEach(button => {
+
+        button.addEventListener("click", () => {
+
+          document
+            .querySelectorAll(".sync-btn")
+            .forEach(other => {
+
+              other.classList.remove(
+                "bg-cyan-600",
+                "text-white"
+              );
+
+              other.classList.add(
+                "bg-gray-800",
+                "text-gray-300"
+              );
+            });
+
+          button.classList.remove(
+            "bg-gray-800",
+            "text-gray-300"
+          );
+
+          button.classList.add(
+            "bg-cyan-600",
+            "text-white"
+          );
+
+          syncBeatInterval =
+            Number(button.dataset.sync);
+        });
+      });
+
+
+      /* =======================================================
+         AUDIO INITIALIZATION
+         ======================================================= */
+
+      function initAudio() {
+
+        if (!audioCtx) {
+
+          const AudioContext =
+            window.AudioContext ||
+            window.webkitAudioContext;
+
+          audioCtx = new AudioContext();
+
+          analyserNode =
+            audioCtx.createAnalyser();
+
+          analyserNode.fftSize = 1024;
+
+          analyserNode.smoothingTimeConstant = 0.75;
+
+          frequencyDataArray =
+            new Uint8Array(
+              analyserNode.frequencyBinCount
+            );
+
+          timeDomainDataArray =
+            new Uint8Array(
+              analyserNode.fftSize
+            );
+        }
+
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+      }
+
+
+      /* =======================================================
+         AUDIO ELEMENT SOURCE
+         IMPORTANT:
+         Create this ONCE.
+         ======================================================= */
+
+      function ensureAudioSource() {
+
+        initAudio();
+
+        if (!audioSourceNode) {
+
+          audioSourceNode =
+            audioCtx.createMediaElementSource(
+              audioElement
+            );
+
+          audioSourceNode.connect(analyserNode);
+        }
+      }
+
+
+      function disconnectMic() {
+
+        if (micSourceNode) {
+          try {
+            micSourceNode.disconnect();
+          } catch (_) {}
+
+          micSourceNode = null;
+        }
+
+        if (micStream) {
+
+          micStream
+            .getTracks()
+            .forEach(track => track.stop());
+
+          micStream = null;
+        }
+      }
+
+
+      /* =======================================================
+         AUDIO FILE
+         ======================================================= */
+
+      audioFileInput.addEventListener("change", async event => {
+
+        const file = event.target.files[0];
+
+        if (!file) return;
+
+        initAudio();
+
+        disconnectMic();
+
+        usingMic = false;
+
+        ensureAudioSource();
+
+        const url =
+          URL.createObjectURL(file);
+
+        /*
+         * Changing src is safe because the
+         * MediaElementAudioSourceNode is reused.
+         */
+
+        audioElement.pause();
+        audioElement.src = url;
+        audioElement.load();
+
+        try {
+
+          await audioElement.play();
+
+          isPlaying = true;
+
+          playPauseBtn.textContent =
+            "Pause Audio";
+
+        } catch (error) {
+
+          console.error(
+            "Audio playback error:",
+            error
+          );
+        }
+
+        /*
+         * Persist the audio for future sessions.
+         */
+
+        try {
+          await saveFiles("audios", [file]);
+        } catch (error) {
+          console.warn(
+            "Could not save audio:",
+            error
+          );
+        }
+      });
+
+
+      /* =======================================================
+         AUDIO PLAYBACK
+         ======================================================= */
+
+      playPauseBtn.addEventListener("click", async () => {
+
+        if (usingMic) return;
+
+        if (!audioElement.src) return;
+
+        initAudio();
+
+        if (audioElement.paused) {
+
+          try {
+
+            await audioElement.play();
+
+            isPlaying = true;
+
+            playPauseBtn.textContent =
+              "Pause Audio";
+
+          } catch (error) {
+
+            console.error(
+              "Playback error:",
+              error
+            );
+          }
+
+        } else {
+
+          audioElement.pause();
+
+          isPlaying = false;
+
+          playPauseBtn.textContent =
+            "Play Audio";
+        }
+      });
+
+
+      audioElement.addEventListener("ended", () => {
+
+        isPlaying = false;
+
+        playPauseBtn.textContent =
+          "Play Audio";
+
+        beatCount = 0;
+        lastBeatIndex = -1;
+      });
+
+
+      /* =======================================================
+         MICROPHONE
+         ======================================================= */
+
+      micBtn.addEventListener("click", async () => {
+
+        initAudio();
+
+        try {
+
+          if (usingMic) {
+
+            disconnectMic();
+
+            usingMic = false;
+            isPlaying = false;
+
+            micBtn.textContent =
+              "Mic Input";
+
+            playPauseBtn.textContent =
+              "Play Audio";
+
+            return;
+          }
+
+          audioElement.pause();
+
+          disconnectMic();
+
+          micStream =
+            await navigator.mediaDevices.getUserMedia({
+              audio: true
+            });
+
+          micSourceNode =
+            audioCtx.createMediaStreamSource(
+              micStream
+            );
+
+          micSourceNode.connect(analyserNode);
+
+          usingMic = true;
+          isPlaying = true;
+
+          micBtn.textContent =
+            "Stop Mic";
+
+          playPauseBtn.textContent =
+            "Mic Active";
+
+        } catch (error) {
+
+          console.error(error);
+
+          alert(
+            "Microphone access denied or unavailable."
+          );
+        }
+      });
+
+
+      /* =======================================================
+         TAP TEMPO
+         ======================================================= */
+
+      tapTempoBtn.addEventListener("click", () => {
+
+        const now =
+          performance.now();
+
+        tapTimes.push(now);
+
+        if (tapTimes.length > 6) {
+          tapTimes.shift();
+        }
+
+        if (tapTimes.length >= 2) {
+
+          const intervals = [];
+
+          for (
+            let i = 1;
+            i < tapTimes.length;
+            i++
+          ) {
+            intervals.push(
+              tapTimes[i] -
+              tapTimes[i - 1]
+            );
+          }
+
+          const average =
+            intervals.reduce(
+              (a, b) => a + b,
+              0
+            ) / intervals.length;
+
+          bpm =
+            Math.max(
+              30,
+              Math.min(
+                300,
+                Math.round(60000 / average)
+              )
+            );
+
+          beatIntervalSeconds =
+            60 / bpm;
+
+          bpmDisplay.textContent =
+            bpm;
+
+          /*
+           * Reset beat phase so the next beat
+           * begins cleanly from the current
+           * audio position.
+           */
+
+          if (
+            !usingMic &&
+            audioElement.src
+          ) {
+
+            const currentBeat =
+              Math.floor(
+                audioElement.currentTime /
+                beatIntervalSeconds
+              );
+
+            lastBeatIndex =
+              currentBeat;
+
+            beatCount =
+              currentBeat;
+          }
+        }
+      });
+
+
+      /* =======================================================
+         VIDEO FILES
+         ======================================================= */
+
+      videoFilesInput.addEventListener(
+        "change",
+        async event => {
+
+          const files =
+            Array.from(event.target.files);
+
+          if (!files.length) return;
+
+          /*
+           * Revoke old object URLs.
+           */
+
+          videoObjectUrls.forEach(url => {
+            URL.revokeObjectURL(url);
+          });
+
+          videoObjectUrls = [];
+
+          videoClips = files.map(file => {
+
+            const url =
+              URL.createObjectURL(file);
+
+            videoObjectUrls.push(url);
+
+            return url;
+          });
+
+          videoCount.textContent =
+            videoClips.length;
+
+          /*
+           * Persist the videos.
+           */
+
+          try {
+            await saveFiles(
+              "videos",
+              files
+            );
+          } catch (error) {
+            console.warn(
+              "Could not save videos:",
+              error
+            );
+          }
+
+          currentClipIndex = -1;
+
+          if (videoClips.length) {
+            switchVideoClip(0, true);
+          }
+        }
+      );
+
+
+      /* =======================================================
+         VIDEO SWITCHING
+         ======================================================= */
+
+      function switchVideoClip(
+        index = -1,
+        force = false
+      ) {
+
+        if (!videoClips.length) {
+          return;
+        }
+
+        /*
+         * Lock only affects AUTOMATIC cuts.
+         * Manual cuts use force=true.
+         */
+
+        if (holdCurrentVideo && !force) {
+          return;
+        }
+
+        /*
+         * User-controlled minimum duration.
+         */
+
+        const minimumDuration =
+          Number(minClipSlider.value);
+
+        const currentAudioTime =
+          usingMic
+            ? performance.now() / 1000
+            : (
+                Number.isFinite(
+                  audioElement.currentTime
+                )
+                  ? audioElement.currentTime
+                  : 0
+              );
+
+        if (
+          !force &&
+          currentAudioTime -
+            lastVideoSwitchAudioTime <
+            minimumDuration
+        ) {
+          return;
+        }
+
+        let nextIndex;
+
+        if (index >= 0) {
+
+          nextIndex =
+            index % videoClips.length;
+
+        } else {
+
+          do {
+
+            nextIndex =
+              Math.floor(
+                Math.random() *
+                videoClips.length
+              );
+
+          } while (
+            nextIndex === currentClipIndex &&
+            videoClips.length > 1
+          );
+        }
+
+        currentClipIndex =
+          nextIndex;
+
+        const targetUrl =
+          videoClips[currentClipIndex];
+
+        inactiveVideo.src =
+          targetUrl;
+
+        inactiveVideo.currentTime = 0;
+
+        inactiveVideo
+          .play()
+          .then(() => {
+
+            /*
+             * Swap the active/inactive
+             * video elements.
+             */
+
+            const temp =
+              activeVideo;
+
+            activeVideo =
+              inactiveVideo;
+
+            inactiveVideo =
+              temp;
+
+            lastVideoSwitchAudioTime =
+              currentAudioTime;
+
+          })
+          .catch(error => {
+            console.error(
+              "Video play error:",
+              error
+            );
+          });
+      }
+
+
+      /* =======================================================
+         HOLD CURRENT VIDEO
+         ======================================================= */
+
+      holdVideoBtn.addEventListener(
+        "click",
+        () => {
+
+          holdCurrentVideo =
+            !holdCurrentVideo;
+
+          if (holdCurrentVideo) {
+
+            holdVideoBtn.classList.remove(
+              "bg-amber-950/80",
+              "text-amber-300"
+            );
+
+            holdVideoBtn.classList.add(
+              "bg-amber-500",
+              "text-black"
+            );
+
+            holdVideoBtn.textContent =
+              "CLIP LOCKED";
+
+          } else {
+
+            holdVideoBtn.classList.remove(
+              "bg-amber-500",
+              "text-black"
+            );
+
+            holdVideoBtn.classList.add(
+              "bg-amber-950/80",
+              "text-amber-300"
+            );
+
+            holdVideoBtn.textContent =
+              "LOCK CURRENT CLIP";
+          }
+        }
+      );
+
+
+      /* =======================================================
+         MANUAL CUT
+         ======================================================= */
+
+      manualSwitchBtn.addEventListener(
+        "click",
+        () => {
+
+          /*
+           * force=true means:
+           * ignore lock AND minimum duration.
+           */
+
+          switchVideoClip(-1, true);
+        }
+      );
+
+
+      /* =======================================================
+         VOLUME
+         ======================================================= */
+
+      function getCurrentVolumeLevel(
+        timeDomain
+      ) {
+
+        if (!timeDomain) return 0;
+
+        let sumSquares = 0;
+
+        for (
+          let i = 0;
+          i < timeDomain.length;
+          i++
+        ) {
+
+          const normalized =
+            (timeDomain[i] - 128) / 128;
+
+          sumSquares +=
+            normalized *
+            normalized;
+        }
+
+        const rms =
+          Math.sqrt(
+            sumSquares /
+            timeDomain.length
+          );
+
+        /*
+         * Convert RMS into a more useful
+         * 0-100 visual range.
+         */
+
+        const db =
+          20 *
+          Math.log10(
+            Math.max(rms, 0.00001)
+          );
+
+        const normalized =
+          (db + 60) / 60;
+
+        return Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round(
+              normalized * 100
+            )
+          )
+        );
+      }
+
+
+      /* =======================================================
+         BASS ENERGY
+         ======================================================= */
+
+      function getBassEnergy() {
+
+        if (!frequencyDataArray) {
+          return 0;
+        }
+
+        /*
+         * Don't rely on a single FFT bin.
+         * Average the lowest useful bins.
+         */
+
+        const bassBins =
+          Math.min(
+            12,
+            frequencyDataArray.length
+          );
+
+        let total = 0;
+
+        for (
+          let i = 1;
+          i < bassBins;
+          i++
+        ) {
+          total +=
+            frequencyDataArray[i];
+        }
+
+        return total /
+          Math.max(
+            1,
+            bassBins - 1
+          );
+      }
+
+
+      /* =======================================================
+         VISUALIZER RENDERERS
+         ======================================================= */
+
+      function drawSmoothLine(
+        context,
+        timeData,
+        width,
+        height
+      ) {
+
+        if (!timeData?.length) return;
+
+        context.save();
+
+        context.beginPath();
+
+        context.strokeStyle =
+          "#00ffcc";
+
+        context.lineWidth = 3;
+        context.lineCap = "round";
+        context.lineJoin = "round";
+
+        const sliceWidth =
+          width /
+          (timeData.length - 1);
+
+        let x = 0;
+
+        const firstY =
+          (
+            (timeData[0] - 128) /
+            128
+          ) *
+          (height / 2) +
+          height / 2;
+
+        context.moveTo(
+          0,
+          firstY
+        );
+
+        for (
+          let i = 0;
+          i < timeData.length - 1;
+          i++
+        ) {
+
+          const y1 =
+            (
+              (timeData[i] - 128) /
+              128
+            ) *
+            (height / 2) +
+            height / 2;
+
+          const y2 =
+            (
+              (timeData[i + 1] - 128) /
+              128
+            ) *
+            (height / 2) +
+            height / 2;
+
+          const midX =
+            x +
+            sliceWidth / 2;
+
+          const midY =
+            (y1 + y2) / 2;
+
+          context.quadraticCurveTo(
+            x,
+            y1,
+            midX,
+            midY
+          );
+
+          x += sliceWidth;
+        }
+
+        const lastY =
+          (
+            (
+              timeData[
+                timeData.length - 1
+              ] - 128
+            ) /
+            128
+          ) *
+          (height / 2) +
+          height / 2;
+
+        context.lineTo(
+          width,
+          lastY
+        );
+
+        context.stroke();
+
+        context.restore();
+      }
+
+
+      function drawSmoothRing(
+        context,
+        timeData,
+        width,
+        height
+      ) {
+
+        if (!timeData) return;
+
+        context.save();
+
+        const centerX =
+          width / 2;
+
+        const centerY =
+          height / 2;
+
+        const baseRadius =
+          Math.min(
+            width,
+            height
+          ) * 0.2;
+
+        context.beginPath();
+
+        context.strokeStyle =
+          "#06b6d4";
+
+        context.lineWidth = 4;
+
+        const points =
+          timeData.length;
+
+        for (
+          let i = 0;
+          i < points;
+          i++
+        ) {
+
+          const angle =
+            (
+              i / points
+            ) *
+            Math.PI *
+            2;
+
+          const amplitude =
+            (
+              timeData[i] - 128
+            ) / 128;
+
+          const radius =
+            baseRadius +
+            amplitude * 60;
+
+          const x =
+            centerX +
+            Math.cos(angle) *
+            radius;
+
+          const y =
+            centerY +
+            Math.sin(angle) *
+            radius;
+
+          if (i === 0) {
+            context.moveTo(x, y);
+          } else {
+            context.lineTo(x, y);
+          }
+        }
+
+        context.closePath();
+        context.stroke();
+
+        context.restore();
+      }
+
+
+      function drawSharpLine(
+        context,
+        timeData,
+        width,
+        height
+      ) {
+
+        if (!timeData) return;
+
+        context.save();
+
+        context.beginPath();
+
+        context.strokeStyle =
+          "#38bdf8";
+
+        context.lineWidth = 2;
+
+        const sliceWidth =
+          width /
+          timeData.length;
+
+        let x = 0;
+
+        for (
+          let i = 0;
+          i < timeData.length;
+          i++
+        ) {
+
+          const y =
+            (
+              (
+                timeData[i] - 128
+              ) /
+              128
+            ) *
+            (height / 2) +
+            height / 2;
+
+          if (i === 0) {
+            context.moveTo(x, y);
+          } else {
+            context.lineTo(x, y);
+          }
+
+          x += sliceWidth;
+        }
+
+        context.stroke();
+
+        context.restore();
+      }
+
+
+      function drawSpectrumBars(
+        context,
+        freqData,
+        width,
+        height
+      ) {
+
+        if (!freqData) return;
+
+        context.save();
+
+        /*
+         * Only use the useful lower portion
+         * of the spectrum.
+         */
+
+        const visibleBins =
+          Math.min(
+            96,
+            freqData.length
+          );
+
+        const barWidth =
+          width /
+          visibleBins;
+
+        for (
+          let i = 0;
+          i < visibleBins;
+          i++
+        ) {
+
+          const barHeight =
+            (
+              freqData[i] /
+              255
+            ) *
+            (height / 2);
+
+          context.fillStyle =
+            `hsl(${i * 3.5}, 100%, 50%)`;
+
+          context.fillRect(
+            i * barWidth,
+            height - barHeight,
+            Math.max(
+              1,
+              barWidth - 1
+            ),
+            barHeight
+          );
+        }
+
+        context.restore();
+      }
+
+
+      /* =======================================================
+         VIDEO → CANVAS
+         ======================================================= */
+
+      function drawVideoCover(
+        context,
+        video,
+        width,
+        height,
+        alpha = 1
+      ) {
+
+        if (
+          !video ||
+          video.readyState < 2 ||
+          video.videoWidth === 0
+        ) {
+          return;
+        }
+
+        const videoRatio =
+          video.videoWidth /
+          video.videoHeight;
+
+        const canvasRatio =
+          width /
+          height;
+
+        let drawWidth;
+        let drawHeight;
+        let x;
+        let y;
+
+        if (videoRatio > canvasRatio) {
+
+          drawHeight =
+            height;
+
+          drawWidth =
+            height *
+            videoRatio;
+
+          x =
+            (width -
+              drawWidth) / 2;
+
+          y = 0;
+
+        } else {
+
+          drawWidth =
+            width;
+
+          drawHeight =
+            width /
+            videoRatio;
+
+          x = 0;
+
+          y =
+            (height -
+              drawHeight) / 2;
+        }
+
+        context.save();
+
+        context.globalAlpha =
+          alpha;
+
+        context.drawImage(
+          video,
+          x,
+          y,
+          drawWidth,
+          drawHeight
+        );
+
+        context.restore();
+      }
+
+
+      /* =======================================================
+         CRT EFFECT FOR RECORDING
+         ======================================================= */
+
+      function drawCRT(
+        context,
+        width,
+        height
+      ) {
+
+        context.save();
+
+        /*
+         * Scanlines
+         */
+
+        context.fillStyle =
+          "rgba(0,0,0,0.20)";
+
+        for (
+          let y = 0;
+          y < height;
+          y += 3
+        ) {
+
+          context.fillRect(
+            0,
+            y,
+            width,
+            1
+          );
+        }
+
+        /*
+         * Subtle color separation.
+         */
+
+        context.globalCompositeOperation =
+          "screen";
+
+        context.fillStyle =
+          "rgba(255,0,0,0.015)";
+
+        context.fillRect(
+          0,
+          0,
+          width,
+          height
+        );
+
+        context.fillStyle =
+          "rgba(0,0,255,0.015)";
+
+        context.fillRect(
+          2,
+          0,
+          width,
+          height
+        );
+
+        context.restore();
+      }
+
+
+      /* =======================================================
+         BEAT ENGINE
+         ======================================================= */
+
+      function processBeat(
+        currentTime
+      ) {
+
+        if (!analyserNode) return;
+
+        /*
+         * Microphone does not have a meaningful
+         * mediaElement currentTime, so use
+         * performance time for it.
+         */
+
+        const songTime =
+          usingMic
+            ? currentTime / 1000
+            : audioElement.currentTime;
+
+        if (!Number.isFinite(songTime)) {
+          return;
+        }
+
+        const beatIndex =
+          Math.floor(
+            songTime /
+            beatIntervalSeconds
+          );
+
+        if (
+          beatIndex === lastBeatIndex
+        ) {
+          return;
+        }
+
+        lastBeatIndex =
+          beatIndex;
+
+        beatCount =
+          beatIndex;
+
+        beatIndicator.classList.add(
+          "scale-150",
+          "bg-cyan-400"
+        );
+
+        setTimeout(() => {
+
+          beatIndicator.classList.remove(
+            "scale-150",
+            "bg-cyan-400"
+          );
+
+        }, 100);
+
+
+        /*
+         * Only cut on the selected
+         * quantization interval.
+         */
+
+        if (
+          beatCount %
+            syncBeatInterval !==
+          0
+        ) {
+          return;
+        }
+
+
+        const volume =
+          getCurrentVolumeLevel(
+            timeDomainDataArray
+          );
+
+        const quietThreshold =
+          Number(
+            quietSlider.value
+          );
+
+        if (
+          volume <
+          quietThreshold
+        ) {
+          return;
+        }
+
+
+        const bassEnergy =
+          getBassEnergy();
+
+        const sensitivity =
+          Number(
+            sensSlider.value
+          );
+
+        if (
+          bassEnergy >=
+          sensitivity
+        ) {
+
+          switchVideoClip();
+        }
+      }
+
+
+      /* =======================================================
+         MASTER RENDER LOOP
+         ======================================================= */
+
+      function renderLoop(time) {
+
+        requestAnimationFrame(
+          renderLoop
+        );
+
+        const width =
+          window.innerWidth;
+
+        const height =
+          window.innerHeight;
+
+        /*
+         * Black background.
+         */
+
+        ctx.fillStyle = "black";
+
+        ctx.fillRect(
+          0,
+          0,
+          width,
+          height
+        );
+
+
+        /*
+         * VIDEO
+         */
+
+        drawVideoCover(
+          ctx,
+          activeVideo,
+          width,
+          height
+        );
+
+
+        /*
+         * AUDIO
+         */
+
+        let currentVolume = 0;
+
+        if (
+          analyserNode &&
+          isPlaying
+        ) {
+
+          analyserNode.getByteFrequencyData(
+            frequencyDataArray
+          );
+
+          analyserNode.getByteTimeDomainData(
+            timeDomainDataArray
+          );
+
+          currentVolume =
+            getCurrentVolumeLevel(
+              timeDomainDataArray
+            );
+
+          processBeat(time);
+        }
+
+
+        /*
+         * VISUALIZER
+         */
+
+        const hideThreshold =
+          Number(
+            hideSlider.value
+          );
+
+        if (
+          currentVolume <=
+          hideThreshold
+        ) {
+
+          const mode =
+            visualizerModeSelect.value;
+
+          if (
+            mode === "smooth-line"
+          ) {
+
+            drawSmoothLine(
+              ctx,
+              timeDomainDataArray,
+              width,
+              height
+            );
+
+          } else if (
+            mode === "smooth-ring"
+          ) {
+
+            drawSmoothRing(
+              ctx,
+              timeDomainDataArray,
+              width,
+              height
+            );
+
+          } else if (
+            mode === "sharp-line"
+          ) {
+
+            drawSharpLine(
+              ctx,
+              timeDomainDataArray,
+              width,
+              height
+            );
+
+          } else if (
+            mode === "spectrum-bars"
+          ) {
+
+            drawSpectrumBars(
+              ctx,
+              frequencyDataArray,
+              width,
+              height
+            );
+          }
+        }
+
+
+        /*
+         * CRT
+         *
+         * This is drawn into the master canvas,
+         * so recordings contain it too.
+         */
+
+        drawCRT(
+          ctx,
+          width,
+          height
+        );
+      }
+
+
+      /* =======================================================
+         RECORDING
+         ======================================================= */
+
+      recordBtn.addEventListener(
+        "click",
+        () => {
+
+          if (!isRecording) {
+
+            recordedChunks = [];
+
+            const stream =
+              canvas.captureStream(60);
+
+            let mimeType =
+              "";
+
+            const candidates = [
+              "video/webm;codecs=vp9",
+              "video/webm;codecs=vp8",
+              "video/webm"
+            ];
+
+            for (
+              const candidate of candidates
+            ) {
+
+              if (
+                MediaRecorder.isTypeSupported(
+                  candidate
+                )
+              ) {
+
+                mimeType =
+                  candidate;
+
+                break;
+              }
+            }
+
+            if (!mimeType) {
+
+              alert(
+                "This browser does not support WebM recording."
+              );
+
+              return;
+            }
+
+            try {
+
+              mediaRecorder =
+                new MediaRecorder(
+                  stream,
+                  { mimeType }
+                );
+
+            } catch (error) {
+
+              console.error(error);
+
+              alert(
+                "Could not start recording."
+              );
+
+              return;
+            }
+
+
+            mediaRecorder.ondataavailable =
+              event => {
+
+                if (
+                  event.data &&
+                  event.data.size > 0
+                ) {
+
+                  recordedChunks.push(
+                    event.data
+                  );
+                }
+              };
+
+
+            mediaRecorder.onstop =
+              () => {
+
+                const blob =
+                  new Blob(
+                    recordedChunks,
+                    {
+                      type: mimeType
+                    }
+                  );
+
+                const url =
+                  URL.createObjectURL(
+                    blob
+                  );
+
+                const link =
+                  document.createElement(
+                    "a"
+                  );
+
+                link.href = url;
+
+                link.download =
+                  "Sunnys-Visualizer-Recording.webm";
+
+                document.body.appendChild(
+                  link
+                );
+
+                link.click();
+
+                link.remove();
+
+                setTimeout(() => {
+                  URL.revokeObjectURL(
+                    url
+                  );
+                }, 1000);
+              };
+
+
+            mediaRecorder.start(
+              1000
+            );
+
+            isRecording = true;
+
+            recordBtn.classList.remove(
+              "bg-red-950/80",
+              "text-red-300"
+            );
+
+            recordBtn.classList.add(
+              "bg-red-600",
+              "text-white"
+            );
+
+            recordText.textContent =
+              "Stop & Save Recording";
+
+          } else {
+
+            if (
+              mediaRecorder &&
+              mediaRecorder.state !==
+                "inactive"
+            ) {
+
+              mediaRecorder.stop();
+            }
+
+            isRecording = false;
+
+            recordBtn.classList.remove(
+              "bg-red-600",
+              "text-white"
+            );
+
+            recordBtn.classList.add(
+              "bg-red-950/80",
+              "text-red-300"
+            );
+
+            recordText.textContent =
+              "Start Canvas Recording";
+          }
+        }
+      );
+
+
+      /* =======================================================
+         CLEANUP
+         ======================================================= */
+
+      window.addEventListener(
+        "beforeunload",
+        () => {
+
+          videoObjectUrls.forEach(
+            url => {
+              URL.revokeObjectURL(url);
+            }
+          );
+
+          disconnectMic();
+
+          if (audioElement.src) {
+            URL.revokeObjectURL(
+              audioElement.src
+            );
+          }
+        }
+      );
+
+
+      /* =======================================================
+         DATABASE INITIALIZATION
+         ======================================================= */
+
+      openDB()
+        .catch(error => {
+
+          /*
+           * IndexedDB is optional.
+           * The visualizer should still work
+           * if the database isn't available.
+           */
+
+          console.warn(
+            "IndexedDB unavailable:",
+            error
+          );
+        })
+        .finally(() => {
+
+          requestAnimationFrame(
+            renderLoop
+          );
+        });
+
+    })();
+  </script>
+
+</body>
+</html>
