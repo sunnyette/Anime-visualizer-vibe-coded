@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sunnys Visualizer v2.0</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background-color: #0d0f12;
+      color: #e2e8f0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      overflow-x: hidden;
+    }
+    input[type=range] {
+      accent-color: #06b6d4;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="h-screen w-screen relative overflow-hidden bg-black select-none">
+
+  <!-- Main Display Container -->
+  <div id="visualizer-container" class="relative w-full h-full flex items-center justify-center bg-black">
+    <!-- Videos remain in DOM for frame buffer decoding; drawn directly to master canvas -->
+    <video id="video-a" class="hidden" playsinline muted loop crossorigin="anonymous"></video>
+    <video id="video-b" class="hidden" playsinline muted loop crossorigin="anonymous"></video>
+    <canvas id="visualizer-canvas" class="absolute inset-0 w-full h-full pointer-events-none z-10"></canvas>
+  </div>
+
+  <!-- Header Bar -->
+  <header class="absolute top-0 left-0 right-0 z-30 p-4 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent">
+    <div class="flex items-center space-x-3">
+      <h1 id="app-title" class="text-xl font-extrabold tracking-wider text-cyan-400 drop-shadow-md">Sunnys Visualizer</h1>
+      <span class="text-xs bg-cyan-950 text-cyan-300 border border-cyan-800 px-2 py-0.5 rounded-full font-mono">v2.0</span>
+    </div>
+
+    <div class="flex items-center space-x-3">
+      <div class="hidden sm:flex items-center bg-gray-900/80 backdrop-blur border border-gray-800 px-3 py-1 rounded-lg space-x-3 font-mono text-xs">
+        <div>BPM: <span id="bpm-display" class="text-cyan-400 font-bold">120</span></div>
+        <div class="text-gray-600">|</div>
+        <div>BEAT: <span id="beat-indicator" class="inline-block w-2 h-2 rounded-full bg-red-500 transition-all duration-75"></span></div>
+      </div>
+
+      <button id="tap-tempo-btn" class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs px-3 py-2 rounded-lg border border-cyan-400/30 transition shadow-lg active:scale-95">
+        TAP TEMPO
+      </button>
+
+      <!-- Options Button Toggle (Hotkey: 'H') -->
+      <button id="options-toggle-btn" data-options-btn class="bg-gray-800/90 hover:bg-gray-700 text-white p-2 rounded-lg border border-gray-700 backdrop-blur transition shadow-lg active:scale-95" title="Toggle Settings (Hotkey: H)">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Settings Drawer Panel -->
+  <aside id="options-panel" class="hidden absolute top-16 right-4 z-40 w-80 max-h-[85vh] bg-gray-900/95 backdrop-blur-md border border-gray-800 text-white rounded-2xl p-5 shadow-2xl overflow-y-auto no-scrollbar space-y-5 text-sm">
+    <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+      <h2 class="font-bold text-gray-200 flex items-center space-x-2">
+        <span>Controls & Config</span>
+        <span class="text-[10px] text-gray-400 font-normal">(Press 'H' to hide)</span>
+      </h2>
+      <button id="close-panel-btn" class="text-gray-400 hover:text-white">&times;</button>
+    </div>
+
+    <!-- Audio Settings -->
+    <div class="space-y-2">
+      <label class="block font-semibold text-xs text-gray-400 uppercase tracking-wider">Audio Source</label>
+      <input type="file" id="audio-file-input" accept="audio/*" class="w-full text-xs text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-cyan-950 file:text-cyan-300 hover:file:bg-cyan-900 cursor-pointer" />
+      <div class="flex items-center space-x-2 pt-1">
+        <button id="play-pause-btn" class="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white py-1.5 rounded-lg font-bold text-xs transition">Play Audio</button>
+        <button id="mic-btn" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold transition">Mic Input</button>
+      </div>
+    </div>
+
+    <!-- Video Library -->
+    <div class="space-y-2">
+      <label class="block font-semibold text-xs text-gray-400 uppercase tracking-wider">Video Clips</label>
+      <input type="file" id="video-files-input" accept="video/*" multiple class="w-full text-xs text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-cyan-950 file:text-cyan-300 hover:file:bg-cyan-900 cursor-pointer" />
+      <div class="text-xs text-gray-500">Loaded Videos: <span id="video-count" class="text-cyan-400 font-bold">0</span></div>
+    </div>
+
+    <!-- Visualizer Selection -->
+    <div class="space-y-2">
+      <label class="block font-semibold text-xs text-gray-400 uppercase tracking-wider">Visualizer Overlay</label>
+      <select id="visualizer-mode" class="w-full bg-gray-800 text-white rounded-lg px-3 py-2 border border-gray-700 text-xs focus:ring-1 focus:ring-cyan-500 outline-none">
+        <option value="smooth-line" selected>Smooth Line</option>
+        <option value="smooth-ring">Smooth Ring</option>
+        <option value="sharp-line">Sharp Line</option>
+        <option value="spectrum-bars">Spectrum Bars</option>
+        <option value="none">Disabled</option>
+      </select>
+    </div>
+
+    <!-- Quantization -->
+    <div class="space-y-2">
+      <label class="block font-semibold text-xs text-gray-400 uppercase tracking-wider">Beat Cut Quantization</label>
+      <div class="grid grid-cols-4 gap-1.5">
+        <button data-sync="1" class="sync-btn bg-cyan-600 text-white py-1 rounded text-xs font-bold">1 Beat</button>
+        <button data-sync="2" class="sync-btn bg-gray-800 hover:bg-gray-700 text-gray-300 py-1 rounded text-xs font-bold">2 Beats</button>
+        <button data-sync="4" class="sync-btn bg-gray-800 hover:bg-gray-700 text-gray-300 py-1 rounded text-xs font-bold">4 Beats</button>
+        <button data-sync="8" class="sync-btn bg-gray-800 hover:bg-gray-700 text-gray-300 py-1 rounded text-xs font-bold">8 Beats</button>
+      </div>
+    </div>
+
+    <!-- Meters & Sliders -->
+    <div class="space-y-4 pt-2 border-t border-gray-800">
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-gray-300">Pause Cuts Below Vol</span>
+          <span class="text-cyan-400 font-mono font-bold"><span id="quiet-val">15</span>%</span>
+        </div>
+        <input type="range" id="quiet-slider" min="0" max="100" value="15" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer">
+      </div>
+
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-gray-300">Hide Visualizer Above Vol</span>
+          <span class="text-cyan-400 font-mono font-bold"><span id="hide-val">85</span>%</span>
+        </div>
+        <input type="range" id="hide-slider" min="0" max="100" value="85" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer">
+      </div>
+
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-gray-300">Bass Energy Threshold</span>
+          <span class="text-cyan-400 font-mono font-bold"><span id="sens-val">140</span></span>
+        </div>
+        <input type="range" id="sens-slider" min="50" max="255" value="140" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer">
+      </div>
+    </div>
+
+    <!-- Performance Lock & Recording -->
+    <div class="space-y-2 pt-2 border-t border-gray-800">
+      <div class="flex space-x-2">
+        <button id="hold-video-btn" class="flex-1 bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-800/50 py-2 rounded-lg text-xs font-bold transition">
+          LOCK CURRENT CLIP
+        </button>
+        <button id="manual-switch-btn" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 py-2 rounded-lg text-xs font-bold transition">
+          CUT NEXT CLIP
+        </button>
+      </div>
+
+      <button id="record-btn" class="w-full bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800/50 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-2">
+        <span id="record-dot" class="w-2 h-2 rounded-full bg-red-500"></span>
+        <span id="record-text">Start Master Recording</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- JavaScript Engine -->
+  <script>
+    (function() {
+      // IndexedDB Storage Manager
+      const DB_NAME = 'SunnysVisualizerDB';
+      const DB_VERSION = 1;
+      let db = null;
+
+      function openDB() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(DB_NAME, DB_VERSION);
+          request.onupgradeneeded = (e) => {
+            const database = e.target.result;
+            if (!database.objectStoreNames.contains('videos')) {
+              database.createObjectStore('videos', { keyPath: 'name' });
+            }
+            if (!database.objectStoreNames.contains('audios')) {
+              database.createObjectStore('audios', { keyPath: 'name' });
+            }
+          };
+          request.onsuccess = (e) => {
+            db = e.target.result;
+            resolve(db);
+          };
+          request.onerror = (e) => reject(e);
+        });
+      }
+
+      async function saveMediaFile(storeName, file) {
+        if (!db) return;
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const tx = db.transaction(storeName, 'readwrite');
+          const store = tx.objectStore(storeName);
+          store.put({ name: file.name, type: file.type, data: arrayBuffer });
+        } catch (err) {
+          console.warn('Failed to save asset to IndexedDB:', err);
+        }
+      }
+
+      async function loadStoredMedia() {
+        if (!db) return;
+        try {
+          // Load Audios
+          const txA = db.transaction('audios', 'readonly');
+          const storeA = txA.objectStore('audios');
+          const audiosReq = storeA.getAll();
+          audiosReq.onsuccess = () => {
+            const audios = audiosReq.result;
+            if (audios && audios.length > 0) {
+              const lastAudio = audios[audios.length - 1];
+              const blob = new Blob([lastAudio.data], { type: lastAudio.type });
+              loadAudioBlob(blob, lastAudio.name);
+            }
+          };
+
+          // Load Videos
+          const txV = db.transaction('videos', 'readonly');
+          const storeV = txV.objectStore('videos');
+          const videosReq = storeV.getAll();
+          videosReq.onsuccess = () => {
+            const videos = videosReq.result;
+            if (videos && videos.length > 0) {
+              videoClips = videos.map(item => {
+                const blob = new Blob([item.data], { type: item.type });
+                const url = createManagedObjectURL(blob);
+                return { name: item.name, url };
+              });
+              videoCount.innerText = videoClips.length;
+              if (currentClipIndex === -1 && videoClips.length > 0) {
+                switchVideoClip(0, true);
+              }
+            }
+          };
+        } catch (err) {
+          console.warn('Error loading assets from IndexedDB:', err);
+        }
+      }
+
+      // Memory Management for Object URLs
+      const activeBlobURLs = new Set();
+      function createManagedObjectURL(blobOrFile) {
+        const url = URL.createObjectURL(blobOrFile);
+        activeBlobURLs.add(url);
+        return url;
+      }
+
+      const canvas = document.getElementById('visualizer-canvas');
+      const ctx = canvas.getContext('2d');
+      const videoA = document.getElementById('video-a');
+      const videoB = document.getElementById('video-b');
+
+      let activeVideo = videoA;
+      let inactiveVideo = videoB;
+      let videoClips = [];
+      let currentClipIndex = -1;
+      let holdCurrentVideo = false;
+
+      // Audio Nodes
+      let audioCtx = null;
+      let analyserNode = null;
+      let audioSourceNode = null;
+      let micSourceNode = null;
+      let currentAudioSource = 'file'; // 'file' or 'mic'
+
+      let isPlaying = false;
+      let audioElement = new Audio();
+      audioElement.crossOrigin = 'anonymous';
+
+      let frequencyDataArray = null;
+      let timeDomainDataArray = null;
+
+      // Beat Engine & Timing State
+      let tapTimes = [];
+      let bpm = 120;
+      let beatIntervalMs = (60 / 120) * 1000;
+      let lastBeatAudioTime = 0;
+      let lastVideoSwitchAudioTime = 0;
+      let beatCount = 0;
+      let syncBeatInterval = 1;
+      const MINIMUM_CLIP_DURATION = 2.0; // Seconds guard between auto-cuts
+
+      // UI Elements
+      const optionsBtn = document.getElementById('options-toggle-btn');
+      const optionsPanel = document.getElementById('options-panel');
+      const closePanelBtn = document.getElementById('close-panel-btn');
+      const tapTempoBtn = document.getElementById('tap-tempo-btn');
+      const bpmDisplay = document.getElementById('bpm-display');
+      const beatIndicator = document.getElementById('beat-indicator');
+
+      const quietSlider = document.getElementById('quiet-slider');
+      const hideSlider = document.getElementById('hide-slider');
+      const sensSlider = document.getElementById('sens-slider');
+      const quietVal = document.getElementById('quiet-val');
+      const hideVal = document.getElementById('hide-val');
+      const sensVal = document.getElementById('sens-val');
+
+      const playPauseBtn = document.getElementById('play-pause-btn');
+      const micBtn = document.getElementById('mic-btn');
+      const audioFileInput = document.getElementById('audio-file-input');
+      const videoFilesInput = document.getElementById('video-files-input');
+      const videoCount = document.getElementById('video-count');
+      const visualizerModeSelect = document.getElementById('visualizer-mode');
+
+      const holdVideoBtn = document.getElementById('hold-video-btn');
+      const manualSwitchBtn = document.getElementById('manual-switch-btn');
+      const recordBtn = document.getElementById('record-btn');
+
+      let mediaRecorder;
+      let recordedChunks = [];
+      let isRecording = false;
+
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      // Options Panel Toggle UX Fix
+      optionsBtn.addEventListener('click', () => optionsPanel.classList.toggle('hidden'));
+      closePanelBtn.addEventListener('click', () => optionsPanel.classList.add('hidden'));
+
+      // Slider Bindings
+      quietSlider.addEventListener('input', (e) => quietVal.innerText = e.target.value);
+      hideSlider.addEventListener('input', (e) => hideVal.innerText = e.target.value);
+      sensSlider.addEventListener('input', (e) => sensVal.innerText = e.target.value);
+
+      document.querySelectorAll('.sync-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          document.querySelectorAll('.sync-btn').forEach(b => {
+            b.classList.remove('bg-cyan-600', 'text-white');
+            b.classList.add('bg-gray-800', 'text-gray-300');
+          });
+          e.target.classList.remove('bg-gray-800', 'text-gray-300');
+          e.target.classList.add('bg-cyan-600', 'text-white');
+          syncBeatInterval = parseInt(e.target.dataset.sync, 10);
+        });
+      });
+
+      // Hotkey 'H' Listener Fix (Toggles settings panel directly)
+      window.addEventListener('keydown', (e) => {
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+        if (e.key.toLowerCase() === 'h') {
+          optionsPanel.classList.toggle('hidden');
+        }
+      });
+
+      tapTempoBtn.addEventListener('click', () => {
+        const now = performance.now();
+        tapTimes.push(now);
+        if (tapTimes.length > 4) tapTimes.shift();
+
+        if (tapTimes.length > 1) {
+          let intervals = [];
+          for (let i = 1; i < tapTimes.length; i++) {
+            intervals.push(tapTimes[i] - tapTimes[i - 1]);
+          }
+          const avgInterval = intervals.reduce((a, b) => a + b) / intervals.length;
+          bpm = Math.round(60000 / avgInterval);
+          beatIntervalMs = avgInterval;
+          bpmDisplay.innerText = bpm;
+        }
+      });
+
+      // Audio Nodes Initialization (Created exactly ONCE)
+      function initAudio() {
+        if (!audioCtx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new AudioContext();
+          analyserNode = audioCtx.createAnalyser();
+          analyserNode.fftSize = 512;
+          frequencyDataArray = new Uint8Array(analyserNode.frequencyBinCount);
+          timeDomainDataArray = new Uint8Array(analyserNode.fftSize);
+
+          audioSourceNode = audioCtx.createMediaElementSource(audioElement);
+          audioSourceNode.connect(analyserNode);
+          analyserNode.connect(audioCtx.destination);
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+      }
+
+      function resetBeatEngine() {
+        lastBeatAudioTime = 0;
+        lastVideoSwitchAudioTime = 0;
+        beatCount = 0;
+      }
+
+      function loadAudioBlob(blob, name) {
+        initAudio();
+        if (currentAudioSource === 'mic' && micSourceNode) {
+          micSourceNode.disconnect();
+          audioSourceNode.connect(analyserNode);
+          currentAudioSource = 'file';
+          micBtn.classList.remove('bg-cyan-600', 'text-white');
+          micBtn.classList.add('bg-gray-800', 'text-gray-300');
+          micBtn.innerText = "Mic Input";
+        }
+
+        const url = createManagedObjectURL(blob);
+        audioElement.src = url;
+        resetBeatEngine();
+
+        audioElement.play().then(() => {
+          isPlaying = true;
+          playPauseBtn.innerText = "Pause Audio";
+        }).catch(err => console.log('Autoplay deferred:', err));
+      }
+
+      audioFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        loadAudioBlob(file, file.name);
+        saveMediaFile('audios', file);
+      });
+
+      playPauseBtn.addEventListener('click', () => {
+        if (!audioElement.src && currentAudioSource === 'file') return;
+        initAudio();
+        if (isPlaying) {
+          if (currentAudioSource === 'file') audioElement.pause();
+          isPlaying = false;
+          playPauseBtn.innerText = "Play Audio";
+        } else {
+          if (currentAudioSource === 'file') audioElement.play();
+          isPlaying = true;
+          playPauseBtn.innerText = "Pause Audio";
+        }
+      });
+
+      audioElement.addEventListener('ended', () => {
+        isPlaying = false;
+        playPauseBtn.innerText = 'Play Audio';
+        resetBeatEngine();
+      });
+
+      micBtn.addEventListener('click', async () => {
+        initAudio();
+        try {
+          if (currentAudioSource === 'mic') {
+            if (micSourceNode) micSourceNode.disconnect();
+            audioSourceNode.connect(analyserNode);
+            currentAudioSource = 'file';
+            micBtn.classList.remove('bg-cyan-600', 'text-white');
+            micBtn.classList.add('bg-gray-800', 'text-gray-300');
+            micBtn.innerText = "Mic Input";
+          } else {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            if (micSourceNode) micSourceNode.disconnect();
+            audioSourceNode.disconnect();
+            micSourceNode = audioCtx.createMediaStreamSource(stream);
+            micSourceNode.connect(analyserNode);
+            currentAudioSource = 'mic';
+            if (isPlaying && !audioElement.paused) audioElement.pause();
+            isPlaying = true;
+            micBtn.classList.remove('bg-gray-800', 'text-gray-300');
+            micBtn.classList.add('bg-cyan-600', 'text-white');
+            micBtn.innerText = "Mic Active";
+            playPauseBtn.innerText = "Play Audio";
+          }
+        } catch (err) {
+          alert('Microphone access denied or unavailable.');
+        }
+      });
+
+      videoFilesInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        if (!files.length) return;
+
+        videoClips = files.map(file => {
+          saveMediaFile('videos', file);
+          return { name: file.name, url: createManagedObjectURL(file) };
+        });
+        videoCount.innerText = videoClips.length;
+
+        if (currentClipIndex === -1 && videoClips.length > 0) {
+          switchVideoClip(0, true);
+        }
+      });
+
+      function switchVideoClip(index = -1, force = false) {
+        if (videoClips.length === 0) return;
+        if (holdCurrentVideo && !force) return;
+
+        let nextIndex;
+        if (index >= 0) {
+          nextIndex = index % videoClips.length;
+        } else {
+          do {
+            nextIndex = Math.floor(Math.random() * videoClips.length);
+          } while (nextIndex === currentClipIndex && videoClips.length > 1);
+        }
+
+        currentClipIndex = nextIndex;
+        const targetClip = videoClips[currentClipIndex];
+        const targetUrl = typeof targetClip === 'string' ? targetClip : targetClip.url;
+
+        inactiveVideo.src = targetUrl;
+        inactiveVideo.play().then(() => {
+          const temp = activeVideo;
+          activeVideo = inactiveVideo;
+          inactiveVideo = temp;
+        }).catch(err => console.log('Video switch play error:', err));
+      }
+
+      holdVideoBtn.addEventListener('click', () => {
+        holdCurrentVideo = !holdCurrentVideo;
+        if (holdCurrentVideo) {
+          holdVideoBtn.classList.remove('bg-amber-950/80', 'text-amber-300');
+          holdVideoBtn.classList.add('bg-amber-500', 'text-black');
+          holdVideoBtn.innerText = "CLIP LOCKED";
+        } else {
+          holdVideoBtn.classList.remove('bg-amber-500', 'text-black');
+          holdVideoBtn.classList.add('bg-amber-950/80', 'text-amber-300');
+          holdVideoBtn.innerText = "LOCK CURRENT CLIP";
+        }
+      });
+
+      // Manual switch button ignores lock state
+      manualSwitchBtn.addEventListener('click', () => {
+        switchVideoClip(-1, true);
+      });
+
+      // Multi-bin Sub/Bass Energy Calculation (Bins 1-10)
+      function getAverageBassEnergy() {
+        if (!frequencyDataArray) return 0;
+        let sum = 0;
+        const binCount = 10;
+        for (let i = 1; i <= binCount; i++) {
+          sum += frequencyDataArray[i];
+        }
+        return sum / binCount;
+      }
+
+      // Calibrated RMS Volume Calculation (0 - 100)
+      function getCurrentVolumeLevel(timeDomain) {
+        if (!timeDomain || timeDomain.length === 0) return 0;
+        let sumSquares = 0;
+        for (let i = 0; i < timeDomain.length; i++) {
+          const norm = (timeDomain[i] - 128) / 128;
+          sumSquares += norm * norm;
+        }
+        const rms = Math.sqrt(sumSquares / timeDomain.length);
+        return Math.min(100, Math.round(rms * 100 * 1.5));
+      }
+
+      // Audio Clock-Synchronized Beat Processing Engine
+      function updateBeatEngine() {
+        if (!isPlaying) return;
+
+        const currentClock = currentAudioSource === 'file' ? audioElement.currentTime : (performance.now() / 1000);
+        const beatIntervalSec = beatIntervalMs / 1000;
+
+        if (currentClock - lastBeatAudioTime >= beatIntervalSec) {
+          lastBeatAudioTime = currentClock;
+          beatCount++;
+
+          beatIndicator.classList.add('scale-150', 'bg-cyan-400');
+          setTimeout(() => beatIndicator.classList.remove('scale-150', 'bg-cyan-400'), 100);
+
+          const currentVol = getCurrentVolumeLevel(timeDomainDataArray);
+          const quietThreshold = parseFloat(quietSlider.value);
+          const isQuiet = currentVol < quietThreshold;
+
+          if (!isQuiet && beatCount % syncBeatInterval === 0) {
+            const bassEnergy = getAverageBassEnergy();
+            const sensLimit = parseFloat(sensSlider.value);
+
+            if (bassEnergy >= sensLimit) {
+              const timeSinceLastSwitch = currentClock - lastVideoSwitchAudioTime;
+              if (timeSinceLastSwitch >= MINIMUM_CLIP_DURATION && !holdCurrentVideo) {
+                switchVideoClip(-1, false);
+                lastVideoSwitchAudioTime = currentClock;
+              }
+            }
+          }
+        }
+      }
+
+      // Visualizers (Centered waveforms & constrained spectrum)
+      function drawSmoothLine(ctx, timeData, width, height, strokeColor = '#00ffcc', lineWidth = 3) {
+        if (!timeData || timeData.length === 0) return;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = lineWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        const sliceWidth = width / (timeData.length - 1);
+        let x = 0;
+
+        for (let i = 0; i < timeData.length - 1; i++) {
+          const v1 = (timeData[i] - 128) / 128.0;
+          const y1 = (v1 * (height / 2)) + (height / 2);
+
+          const v2 = (timeData[i + 1] - 128) / 128.0;
+          const y2 = (v2 * (height / 2)) + (height / 2);
+
+          const midX = x + sliceWidth / 2;
+          const midY = (y1 + y2) / 2;
+
+          if (i === 0) ctx.moveTo(x, y1);
+          ctx.quadraticCurveTo(x, y1, midX, midY);
+          x += sliceWidth;
+        }
+
+        const lastV = (timeData[timeData.length - 1] - 128) / 128.0;
+        const lastY = (lastV * (height / 2)) + (height / 2);
+        ctx.lineTo(width, lastY);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawSmoothRing(ctx, timeData, width, height) {
+        if (!timeData) return;
+        ctx.save();
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const baseRadius = Math.min(width, height) * 0.2;
+
+        ctx.beginPath();
+        ctx.strokeStyle = '#06b6d4';
+        ctx.lineWidth = 4;
+
+        const totalPoints = timeData.length;
+        for (let i = 0; i < totalPoints; i++) {
+          const angle = (i / totalPoints) * Math.PI * 2;
+          const amp = (timeData[i] - 128) / 128;
+          const r = baseRadius + amp * 60;
+          const x = centerX + Math.cos(angle) * r;
+          const y = centerY + Math.sin(angle) * r;
+
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawSharpLine(ctx, timeData, width, height) {
+        if (!timeData) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2;
+
+        const sliceWidth = width / timeData.length;
+        let x = 0;
+        for (let i = 0; i < timeData.length; i++) {
+          const v = (timeData[i] - 128) / 128.0;
+          const y = (v * (height / 2)) + (height / 2);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+          x += sliceWidth;
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawSpectrumBars(ctx, freqData, width, height) {
+        if (!freqData) return;
+        ctx.save();
+        const displayBins = 64;
+        const barWidth = width / displayBins;
+        let x = 0;
+
+        for (let i = 0; i < displayBins; i++) {
+          const barHeight = (freqData[i] / 255) * (height / 2);
+          ctx.fillStyle = `hsl(${i * 4}, 100%, 50%)`;
+          ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+          x += barWidth;
+        }
+        ctx.restore();
+      }
+
+      // Master Canvas CRT Post-Processing Pass
+      function drawCRTFilter(ctx, width, height) {
+        ctx.save();
+        // Scanlines
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+        for (let y = 0; y < height; y += 4) {
+          ctx.fillRect(0, y, width, 2);
+        }
+        // Vignette
+        const gradient = ctx.createRadialGradient(width / 2, height / 2, width / 4, width / 2, height / 2, Math.max(width, height) / 1.5);
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.5)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+      }
+
+      // Master Canvas Stream Recording
+      recordBtn.addEventListener('click', () => {
+        if (!isRecording) {
+          recordedChunks = [];
+          const stream = canvas.captureStream(30);
+
+          const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+            ? 'video/webm;codecs=vp9'
+            : MediaRecorder.isTypeSupported('video/webm')
+              ? 'video/webm'
+              : 'video/mp4';
+
+          try {
+            mediaRecorder = new MediaRecorder(stream, { mimeType });
+          } catch (err) {
+            mediaRecorder = new MediaRecorder(stream);
+          }
+
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) recordedChunks.push(e.data);
+          };
+
+          mediaRecorder.onstop = () => {
+            const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'Sunnys-Visualizer-Master-Recording.webm';
+            a.click();
+            URL.revokeObjectURL(url);
+          };
+
+          mediaRecorder.start();
+          isRecording = true;
+          recordBtn.classList.remove('bg-red-950/80', 'text-red-300');
+          recordBtn.classList.add('bg-red-600', 'text-white');
+          document.getElementById('record-text').innerText = "Stop & Save Recording";
+        } else {
+          mediaRecorder.stop();
+          isRecording = false;
+          recordBtn.classList.remove('bg-red-600', 'text-white');
+          recordBtn.classList.add('bg-red-950/80', 'text-red-300');
+          document.getElementById('record-text').innerText = "Start Master Recording";
+        }
+      });
+
+      // Master Composite Render Loop
+      function renderLoop() {
+        requestAnimationFrame(renderLoop);
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Layer 1: Render active video directly into master canvas
+        if (activeVideo && !activeVideo.paused && activeVideo.readyState >= 2) {
+          ctx.drawImage(activeVideo, 0, 0, canvas.width, canvas.height);
+        }
+
+        // Layer 2: Render Visualizer Overlay
+        if (analyserNode && isPlaying) {
+          analyserNode.getByteFrequencyData(frequencyDataArray);
+          analyserNode.getByteTimeDomainData(timeDomainDataArray);
+
+          updateBeatEngine();
+
+          const currentVol = getCurrentVolumeLevel(timeDomainDataArray);
+          const hideThreshold = parseFloat(hideSlider.value);
+          const isOverVolumeLimit = currentVol > hideThreshold;
+
+          if (!isOverVolumeLimit) {
+            const mode = visualizerModeSelect.value;
+            if (mode === 'smooth-line') {
+              drawSmoothLine(ctx, timeDomainDataArray, canvas.width, canvas.height, '#00ffcc', 3);
+            } else if (mode === 'smooth-ring') {
+              drawSmoothRing(ctx, timeDomainDataArray, canvas.width, canvas.height);
+            } else if (mode === 'sharp-line') {
+              drawSharpLine(ctx, timeDomainDataArray, canvas.width, canvas.height);
+            } else if (mode === 'spectrum-bars') {
+              drawSpectrumBars(ctx, frequencyDataArray, canvas.width, canvas.height);
+            }
+          }
+        }
+
+        // Layer 3: Render CRT Post-Processing Filter directly on canvas
+        drawCRTFilter(ctx, canvas.width, canvas.height);
+      }
+
+      // Initialize App & Storage
+      openDB()
+        .then(() => loadStoredMedia())
+        .catch(err => console.warn('IndexedDB unavailable, running in-memory mode:', err));
+
+      // Start Render Loop immediately
+      requestAnimationFrame(renderLoop);
+    })();
+  </script>
+</body>
+</html>
