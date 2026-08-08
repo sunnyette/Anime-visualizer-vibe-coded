@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>4:3 BPM Visualizer & Chromecast</title>
+
+  <!-- Google Cast Web Sender SDK -->
+  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+
+  <style>
+    :root {
+      --neon-cyan: #00f0ff;
+      --neon-pink: #ff007f;
+      --neon-yellow: #ffe600;
+      --bg-dark: #0a0a0c;
+      --panel-bg: rgba(18, 18, 24, 0.85);
+      --panel-border: rgba(0, 240, 255, 0.3);
+      --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: #fff;
+      font-family: var(--font-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      overflow-x: hidden;
+    }
+
+    header {
+      width: 100%;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.6);
+      border-bottom: 1px solid var(--panel-border);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+    }
+
+    .title {
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      color: var(--neon-cyan);
+      text-transform: uppercase;
+      text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Chromecast Launcher styling */
+    google-cast-launcher {
+      width: 28px;
+      height: 28px;
+      cursor: pointer;
+      --disconnected-color: var(--neon-cyan);
+      --connected-color: #00ff66;
+      filter: drop-shadow(0 0 4px var(--neon-cyan));
+    }
+
+    .icon-btn {
+      background: transparent;
+      border: 1px solid var(--neon-cyan);
+      color: var(--neon-cyan);
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .icon-btn:hover, .icon-btn:active {
+      background: var(--neon-cyan);
+      color: #000;
+      box-shadow: 0 0 10px var(--neon-cyan);
+    }
+
+    /* STAGE & 4:3 CANVAS CONTAINER */
+    .viewport-container {
+      width: 100%;
+      max-width: 960px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 10px;
+      flex-grow: 1;
+    }
+
+    .stage-wrapper {
+      position: relative;
+      width: min(100vw - 20px, calc((100vh - 280px) * 4 / 3));
+      height: min(calc((100vw - 20px) * 3 / 4), 100vh - 280px);
+      aspect-ratio: 4 / 3;
+      background: #000;
+      border: 2px solid var(--panel-border);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.8), 0 0 10px rgba(0, 240, 255, 0.2);
+    }
+
+    /* Video & Canvas layer - STRICT 4:3 CROPPING */
+    .vid-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover; /* Crops video to 4:3 container in DOM */
+      object-position: center;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      pointer-events: none;
+    }
+
+    .vid-layer.active {
+      opacity: 1;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* CRT Scanline Overlay */
+    .crt-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        rgba(18, 16, 16, 0) 50%, 
+        rgba(0, 0, 0, 0.25) 50%
+      );
+      background-size: 100% 4px;
+      pointer-events: none;
+      z-index: 3;
+    }
+
+    /* CONTROLS & CONTROLS DASHBOARD */
+    .controls-panel {
+      width: 100%;
+      max-width: 960px;
+      padding: 12px 16px;
+      background: var(--panel-bg);
+      border-top: 1px solid var(--panel-border);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      backdrop-filter: blur(10px);
+      z-index: 10;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .control-group label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: var(--neon-cyan);
+      letter-spacing: 1px;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-row button {
+      flex: 1;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--panel-border);
+      color: #fff;
+      font-size: 0.8rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-row button:hover {
+      background: rgba(0, 240, 255, 0.2);
+    }
+
+    .bpm-display {
+      font-size: 1.4rem;
+      font-weight: 900;
+      color: var(--neon-yellow);
+      text-shadow: 0 0 6px var(--neon-yellow);
+      text-align: center;
+      padding: 4px;
+      background: rgba(0,0,0,0.4);
+      border-radius: 4px;
+      border: 1px solid rgba(255, 230, 0, 0.3);
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .file-label {
+      padding: 8px;
+      background: rgba(0, 240, 255, 0.1);
+      border: 1px dashed var(--neon-cyan);
+      color: var(--neon-cyan);
+      text-align: center;
+      font-size: 0.8rem;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .file-label:hover {
+      background: rgba(0, 240, 255, 0.25);
+    }
+
+    input[type="range"] {
+      accent-color: var(--neon-cyan);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title">4:3 BPM VISUALIZER</div>
+    <div class="header-actions">
+      <!-- Official Google Cast Launcher -->
+      <google-cast-launcher id="castbutton" title="Cast to Chromecast"></google-cast-launcher>
+      
+      <!-- Custom Cast trigger fallback -->
+      <button class="icon-btn" id="castBtn" title="Cast Screen/Media">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6M2 20h.01"/>
+        </svg>
+        Cast
+      </button>
+
+      <button class="icon-btn" id="recordBtn">Rec</button>
+    </div>
+  </header>
+
+  <div class="viewport-container">
+    <div class="stage-wrapper" id="stage">
+      <!-- Dual Video Layers for seamless crossfading -->
+      <video id="vidA" class="vid-layer active" playsinline muted loop></video>
+      <video id="vidB" class="vid-layer" playsinline muted loop></video>
+      
+      <!-- 4:3 Visualizer Overlay Canvas -->
+      <canvas id="canvas"></canvas>
+      
+      <!-- Retro CRT Overlay -->
+      <div class="crt-overlay"></div>
+    </div>
+  </div>
+
+  <div class="controls-panel">
+    <!-- Audio & BPM Control -->
+    <div class="control-group">
+      <label>Audio Source</label>
+      <div class="btn-row">
+        <label for="audioFile" class="file-label" style="flex:1;">Upload Audio</label>
+        <input type="file" id="audioFile" accept="audio/*">
+        <button id="micBtn">Mic</button>
+      </div>
+      <audio id="audioPlayer" controls style="width:100%; margin-top:4px; height:28px;"></audio>
+    </div>
+
+    <!-- BPM & Tap Tempo -->
+    <div class="control-group">
+      <label>BPM Engine</label>
+      <div class="bpm-display" id="bpmNum">120 BPM</div>
+      <div class="btn-row" style="margin-top: 4px;">
+        <button id="tapBtn">TAP TEMPO</button>
+      </div>
+    </div>
+
+    <!-- Video Source Upload -->
+    <div class="control-group">
+      <label>4:3 Video Layers</label>
+      <label for="videoFile" class="file-label">Add Video (Center Cropped)</label>
+      <input type="file" id="videoFile" accept="video/*" multiple>
+      <div class="btn-row" style="margin-top: 4px;">
+        <button id="prevVidBtn">&laquo; Prev</button>
+        <button id="nextVidBtn">Next &raquo;</button>
+      </div>
+    </div>
+
+    <!-- Visual FX Adjustments -->
+    <div class="control-group">
+      <label>Visualizer FX</label>
+      <div style="display:flex; flex-direction:column; gap:4px; font-size:0.75rem;">
+        <label>Sensitivity: <input type="range" id="sensSlider" min="1" max="5" value="2" step="0.1"></label>
+        <label>Video Opacity: <input type="range" id="opacSlider" min="0" max="1" value="0.75" step="0.05"></label>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- 1. GOOGLE CAST INITIALIZATION ---
+    window.__onGCastApiAvailable = function(isAvailable) {
+      if (isAvailable && typeof cast !== 'undefined' && cast.framework) {
+        try {
+          cast.framework.CastContext.getInstance().setOptions({
+            receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+            autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+          });
+          console.log('Chromecast initialized');
+        } catch (e) {
+          console.warn('Cast setup notice:', e);
+        }
+      }
+    };
+
+    document.getElementById('castBtn').addEventListener('click', () => {
+      if (window.cast && cast.framework) {
+        const context = cast.framework.CastContext.getInstance();
+        context.requestSession().catch(() => {});
+      } else {
+        alert('Google Cast is ready. Select a Cast device from your Chrome browser cast menu.');
+      }
+    });
+
+    // --- 2. AUDIO & CANVAS SETUP ---
+    const stage = document.getElementById('stage');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    const vidA = document.getElementById('vidA');
+    const vidB = document.getElementById('vidB');
+    let activeVideo = vidA;
+    let videoPlaylist = [];
+    let currentVidIdx = 0;
+
+    let audioCtx, analyser, dataArray, audioSource;
+    let bpm = 120;
+    let lastTap = 0;
+    let tapTimes = [];
+
+    // Resize canvas to internal 4:3 resolution (e.g. 1440x1080)
+    function resizeCanvas() {
+      canvas.width = 1440;
+      canvas.height = 1080;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // --- 3. CENTER-CROP VIDEO TO 4:3 CANVAS (NO SMOOSHING) ---
+    /**
+     * Draws video onto a 4:3 canvas using aspect-ratio cover cropping
+     * to completely eliminate stretching or distortion.
+     */
+    function drawVideoCover(ctx, video, targetW, targetH) {
+      if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
+
+      const vW = video.videoWidth;
+      const vH = video.videoHeight;
+      const targetAspect = targetW / targetH; // 4/3 = 1.3333
+      const videoAspect = vW / vH;
+
+      let sX = 0, sY = 0, sW = vW, sH = vH;
+
+      if (videoAspect > targetAspect) {
+        // Video is wider than 4:3 (e.g. 16:9) -> crop left & right
+        sW = vH * targetAspect;
+        sX = (vW - sW) / 2;
+      } else {
+        // Video is taller than 4:3 (e.g. 9:16 portrait) -> crop top & bottom
+        sH = vW / targetAspect;
+        sY = (vH - sH) / 2;
+      }
+
+      ctx.drawImage(video, sX, sY, sW, sH, 0, 0, targetW, targetH);
+    }
+
+    // --- 4. VIDEO PLAYLIST & SWAPPING ---
+    document.getElementById('videoFile').addEventListener('change', (e) => {
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+
+      videoPlaylist = files.map(file => URL.createObjectURL(file));
+      currentVidIdx = 0;
+      loadVideo(videoPlaylist[currentVidIdx]);
+    });
+
+    function loadVideo(src) {
+      const nextVid = (activeVideo === vidA) ? vidB : vidA;
+      nextVid.src = src;
+      nextVid.play().catch(() => {});
+      
+      nextVid.onloadeddata = () => {
+        nextVid.classList.add('active');
+        activeVideo.classList.remove('active');
+        activeVideo = nextVid;
+      };
+    }
+
+    document.getElementById('nextVidBtn').onclick = () => {
+      if (!videoPlaylist.length) return;
+      currentVidIdx = (currentVidIdx + 1) % videoPlaylist.length;
+      loadVideo(videoPlaylist[currentVidIdx]);
+    };
+
+    document.getElementById('prevVidBtn').onclick = () => {
+      if (!videoPlaylist.length) return;
+      currentVidIdx = (currentVidIdx - 1 + videoPlaylist.length) % videoPlaylist.length;
+      loadVideo(videoPlaylist[currentVidIdx]);
+    };
+
+    // --- 5. AUDIO ENGINE & TAP TEMPO ---
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    document.getElementById('audioFile').addEventListener('change', (e) => {
+      initAudio();
+      const file = e.target.files[0];
+      if (file) {
+        const player = document.getElementById('audioPlayer');
+        player.src = URL.createObjectURL(file);
+        
+        if (audioSource) audioSource.disconnect();
+        audioSource = audioCtx.createMediaElementSource(player);
+        audioSource.connect(analyser);
+        analyser.connect(audioCtx.destination);
+        player.play();
+      }
+    });
+
+    document.getElementById('micBtn').addEventListener('click', async () => {
+      initAudio();
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (audioSource) audioSource.disconnect();
+        audioSource = audioCtx.createMediaStreamSource(stream);
+        audioSource.connect(analyser);
+      } catch (err) {
+        alert('Microphone access denied or unavailable.');
+      }
+    });
+
+    // Tap Tempo Logic
+    document.getElementById('tapBtn').addEventListener('click', () => {
+      const now = performance.now();
+      if (lastTap && (now - lastTap) < 2000) {
+        tapTimes.push(now - lastTap);
+        if (tapTimes.length > 4) tapTimes.shift();
+        const avgDiff = tapTimes.reduce((a, b) => a + b, 0) / tapTimes.length;
+        bpm = Math.round(60000 / avgDiff);
+        document.getElementById('bpmNum').innerText = `${bpm} BPM`;
+      } else {
+        tapTimes = [];
+      }
+      lastTap = now;
+    });
+
+    // --- 6. RENDER LOOP ---
+    const sensSlider = document.getElementById('sensSlider');
+    const opacSlider = document.getElementById('opacSlider');
+
+    function renderFrame() {
+      requestAnimationFrame(renderFrame);
+
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // A. Draw 4:3 Center-Cropped Video directly to Canvas
+      const opacity = parseFloat(opacSlider.value);
+      if (activeVideo && opacity > 0) {
+        ctx.globalAlpha = opacity;
+        drawVideoCover(ctx, activeVideo, w, h);
+        ctx.globalAlpha = 1.0;
+      }
+
+      // B. Draw Audio-Reactive Visualizer
+      if (analyser) {
+        analyser.getByteFrequencyData(dataArray);
+
+        const sensitivity = parseFloat(sensSlider.value);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const avg = (sum / dataArray.length) * sensitivity;
+
+        // Reactive Pulse Ring
+        const radius = Math.min(w, h) * 0.2 + (avg * 1.2);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(w / 2, h / 2, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(0, 240, 255, ${Math.min(1, avg / 120)})`;
+        ctx.lineWidth = 6;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#00f0ff';
+        ctx.stroke();
+        ctx.restore();
+
+        // Spectrum Bars
+        const barWidth = (w / dataArray.length) * 1.5;
+        let x = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const barHeight = (dataArray[i] / 255) * (h * 0.35) * sensitivity;
+          
+          ctx.fillStyle = `hsl(${(i * 5) + 180}, 100%, 50%)`;
+          ctx.fillRect(x, h - barHeight, barWidth - 2, barHeight);
+
+          x += barWidth;
+        }
+      }
+    }
+
+    renderFrame();
+
+    // --- 7. RECORDING FUNCTIONALITY ---
+    let mediaRecorder;
+    let recordedChunks = [];
+    const recordBtn = document.getElementById('recordBtn');
+
+    recordBtn.addEventListener('click', () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        recordBtn.innerText = 'Rec';
+        recordBtn.style.color = 'var(--neon-cyan)';
+      } else {
+        const stream = canvas.captureStream(30);
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) recordedChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `bpm-visualizer-4x3-${Date.now()}.webm`;
+          a.click();
+        };
+
+        mediaRecorder.start();
+        recordBtn.innerText = 'Stop';
+        recordBtn.style.color = 'var(--neon-pink)';
+      }
+    });
+  </script>
+</body>
+</html>
