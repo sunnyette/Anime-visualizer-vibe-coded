@@ -1,0 +1,2120 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Sunny's Visualizer - Studio Edition v3</title>
+<style>
+:root {
+  --accent-color: #107c41;
+  --accent-glow: rgba(16, 124, 65, 0.4);
+  --viz-accent: #00ffff;
+  --lyric-opacity: 0.9;
+  --lyric-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --bg-main: #0c0d10;
+  --panel-bg: #16181e;
+  --panel-border: #2a2d38;
+  --text-main: #e2e8f0;
+  --text-muted: #94a3b8;
+  --input-bg: #0d0e12;
+  --item-bg: #1c1e26;
+  --bevel-top-light: #323645;
+  --bevel-bottom-dark: #08090b;
+  --bevel-inset-top: #08090b;
+  --bevel-inset-bottom: #323645;
+}
+body.light-mode {
+  --bg-main: #d0d4dc;
+  --panel-bg: #e2e6ee;
+  --panel-border: #9fa6b5;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --input-bg: #f8fafc;
+  --item-bg: #d8dce6;
+  --bevel-top-light: #ffffff;
+  --bevel-bottom-dark: #8c94a4;
+  --bevel-inset-top: #8c94a4;
+  --bevel-inset-bottom: #ffffff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
+body {
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  user-select: none;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+#stage {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  z-index: 1;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+#screen-frame {
+  position: relative;
+  width: min(100vw, calc(100vh * 4 / 3));
+  height: min(100vh, calc(100vw * 3 / 4));
+  aspect-ratio: 4 / 3;
+  border-top: 4px solid var(--bevel-top-light);
+  border-left: 4px solid var(--bevel-top-light);
+  border-right: 4px solid var(--bevel-bottom-dark);
+  border-bottom: 4px solid var(--bevel-bottom-dark);
+  outline: 2px solid var(--accent-color);
+  border-radius: 0px;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.9), 0 0 25px var(--accent-glow);
+  overflow: hidden;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.3s, outline-color 0.3s, box-shadow 0.3s;
+}
+#video-container {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  overflow: hidden;
+  z-index: 2;
+  transform-origin: center center;
+  will-change: transform;
+}
+#stage.drag-over::after {
+  content: 'Drop Audio or Video Files Here';
+  position: absolute;
+  inset: 0;
+  background: rgba(16, 124, 65, 0.85);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+.vid-layer {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+  z-index: 2;
+}
+.vid-layer.active {
+  opacity: 1;
+  z-index: 3;
+}
+#fallback-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 1;
+  display: block;
+}
+canvas#wave-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  opacity: 1;
+  pointer-events: none;
+  z-index: 5;
+}
+#lyrics-container {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  font-family: var(--lyric-font);
+  opacity: var(--lyric-opacity);
+  text-shadow: 0 2px 10px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.9);
+  transition: opacity 0.2s ease;
+  overflow: hidden;
+  word-break: break-word;
+}
+.lyric-word {
+  display: inline-block;
+  margin: 0 4px;
+  opacity: 0.55;
+  transition: color 0.12s ease, transform 0.12s ease, opacity 0.12s ease, text-shadow 0.12s ease;
+}
+.lyric-word.active {
+  opacity: 1;
+  color: #ffffff;
+  transform: scale(1.08);
+  text-shadow: 0 0 15px var(--accent-color), 0 0 30px var(--accent-glow);
+}
+#lyrics-container.mode-opt1 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+#lyrics-container.mode-opt1 .lyric-word-giant {
+  font-size: clamp(3rem, 18vw, 12rem);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-align: center;
+  line-height: 1;
+  color: #ffffff;
+  text-shadow: 0 0 25px var(--accent-glow), 0 4px 15px rgba(0,0,0,0.9);
+  animation: popIn 0.08s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+#lyrics-container.mode-opt2 {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-end;
+  padding: 24px;
+  text-align: right;
+}
+#lyrics-container.mode-opt2 .lyric-line-subtle {
+  font-size: clamp(0.85rem, 2.2vw, 1.35rem);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(0, 0, 0, 0.7);
+  padding: 8px 16px;
+  border-radius: 0px;
+  border-top: 2px solid var(--bevel-top-light);
+  border-left: 2px solid var(--bevel-top-light);
+  border-right: 2px solid var(--bevel-bottom-dark);
+  border-bottom: 2px solid var(--bevel-bottom-dark);
+  border-right-color: var(--accent-color);
+  max-width: 80%;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+#lyrics-container.mode-opt3 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+}
+#lyrics-container.mode-opt3 .lyric-phrase-mid {
+  font-size: clamp(1.4rem, 4vw, 2.8rem);
+  font-weight: 800;
+  text-align: center;
+  color: #ffffff;
+  background: rgba(10, 10, 15, 0.75);
+  padding: 12px 26px;
+  border-radius: 0px;
+  border-top: 2px solid var(--bevel-top-light);
+  border-left: 2px solid var(--bevel-top-light);
+  border-right: 2px solid var(--bevel-bottom-dark);
+  border-bottom: 2px solid var(--bevel-bottom-dark);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  line-height: 1.3;
+}
+#lyrics-container.mode-opt4 {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: 20px;
+  gap: 6px;
+  max-height: 100%;
+}
+#lyrics-container.mode-opt4 .lyric-waterfall-word {
+  font-size: clamp(1rem, 2.8vw, 1.8rem);
+  font-weight: 800;
+  color: #ffffff;
+  background: rgba(0,0,0,0.7);
+  padding: 4px 10px;
+  border-radius: 0px;
+  border-top: 2px solid var(--bevel-top-light);
+  border-left: 3px solid var(--accent-color);
+  border-right: 2px solid var(--bevel-bottom-dark);
+  border-bottom: 2px solid var(--bevel-bottom-dark);
+  animation: slideInLeft 0.1s ease-out;
+}
+@keyframes popIn {
+  from { transform: scale(0.85); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes slideInLeft {
+  from { transform: translateX(-15px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+#crt-overlay {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  z-index: 8;
+  pointer-events: none;
+  display: none;
+  background:
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%),
+    linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 255, 0, 0.03));
+  background-size: 100% 3px, 6px 100%;
+  box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.8);
+}
+@keyframes crtFlicker {
+  0% { opacity: 0.96; }
+  50% { opacity: 1; }
+  100% { opacity: 0.97; }
+}
+#stage.crt-active #crt-overlay {
+  display: block;
+  animation: crtFlicker 0.12s infinite;
+}
+#flash-overlay {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: #fff;
+  z-index: 6;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.05s ease-out;
+}
+#flash-overlay.flash { opacity: 0.8; }
+#ui-layer {
+  position: absolute;
+  z-index: 10;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--panel-bg);
+  color: var(--text-main);
+  border-top: 3px solid var(--bevel-top-light);
+  border-left: 3px solid var(--bevel-top-light);
+  border-right: 3px solid var(--bevel-bottom-dark);
+  border-bottom: 3px solid var(--bevel-bottom-dark);
+  border-radius: 0px;
+  padding: 18px;
+  width: 92%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+  transition: opacity 0.3s ease, transform 0.3s ease, background-color 0.2s;
+}
+#ui-layer.hidden {
+  opacity: 0;
+  transform: translate(-50%, -45%);
+  pointer-events: none;
+}
+.ui-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+h1 {
+  font-size: 1.2rem;
+  color: var(--accent-color);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 900;
+}
+.theme-toggle-btn {
+  background: var(--panel-bg);
+  color: var(--text-main);
+  border-top: 2px solid var(--bevel-top-light);
+  border-left: 2px solid var(--bevel-top-light);
+  border-right: 2px solid var(--bevel-bottom-dark);
+  border-bottom: 2px solid var(--bevel-bottom-dark);
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+.theme-toggle-btn:active {
+  border-top: 2px solid var(--bevel-bottom-dark);
+  border-left: 2px solid var(--bevel-bottom-dark);
+  border-right: 2px solid var(--bevel-top-light);
+  border-bottom: 2px solid var(--bevel-top-light);
+}
+.color-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-top: 2px solid var(--bevel-inset-top);
+  border-left: 2px solid var(--bevel-inset-top);
+  border-right: 2px solid var(--bevel-inset-bottom);
+  border-bottom: 2px solid var(--bevel-inset-bottom);
+  font-size: 0.7rem;
+  font-weight: bold;
+  background: var(--input-bg);
+  color: #fff;
+  text-align: center;
+  margin: 0 auto 10px auto;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.badge-container { text-align: center; }
+.section-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--accent-color);
+  margin: 12px 0 6px 0;
+  font-weight: 800;
+  border-bottom: 2px solid var(--panel-border);
+  padding-bottom: 2px;
+}
+.file-box {
+  background: var(--input-bg);
+  border-top: 2px solid var(--bevel-inset-top);
+  border-left: 2px solid var(--bevel-inset-top);
+  border-right: 2px solid var(--bevel-inset-bottom);
+  border-bottom: 2px solid var(--bevel-inset-bottom);
+  padding: 10px;
+  margin-bottom: 8px;
+}
+label { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 700; text-transform: uppercase; }
+input[type="file"], select, textarea {
+  width: 100%;
+  font-size: 0.75rem;
+  color: var(--text-main);
+  background: var(--panel-bg);
+  border-top: 2px solid var(--bevel-inset-top);
+  border-left: 2px solid var(--bevel-inset-top);
+  border-right: 2px solid var(--bevel-inset-bottom);
+  border-bottom: 2px solid var(--bevel-inset-bottom);
+  padding: 6px;
+  font-family: inherit;
+}
+textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+.clip-list-container {
+  margin-top: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  border-top: 1px solid var(--panel-border);
+  padding-top: 6px;
+}
+.clip-item, .audio-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--item-bg);
+  border-top: 2px solid var(--bevel-top-light);
+  border-left: 2px solid var(--bevel-top-light);
+  border-right: 2px solid var(--bevel-bottom-dark);
+  border-bottom: 2px solid var(--bevel-bottom-dark);
+  padding: 6px;
+  margin-bottom: 6px;
+  transition: opacity 0.2s, filter 0.2s;
+}
+.clip-item.disabled {
+  opacity: 0.45;
+  filter: grayscale(80%);
+}
+.audio-item.active {
+  border-color: var(--accent-color);
+  background: rgba(16, 124, 65, 0.2);
+}
+.clip-thumb {
+  width: 44px;
+  height: 33px;
+  object-fit: cover;
+  border: 1px solid var(--panel-border);
+  background: #000;
+  flex-shrink: 0;
+}
+.clip-info, .audio-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.clip-name, .audio-name {
+  font-size: 0.75rem;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+.clip-controls-inline {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.tag-btn, .clip-toggle-btn {
+  font-size: 0.65rem;
+  color: var(--accent-color);
+  background: var(--panel-bg);
+  border-top: 2px solid var(--bevel-top-light);
+  border-left: 2px solid var(--bevel-top-light);
+  border-right: 2px solid var(--bevel-bottom-dark);
+  border-bottom: 2px solid var(--bevel-bottom-dark);
+  padding: 2px 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
+.clip-toggle-btn.enabled { color: #22c55e; }
+.trim-input {
+  width: 50px;
+  font-size: 0.65rem;
+  padding: 2px;
+  background: var(--input-bg);
+  border-top: 1px solid var(--bevel-inset-top);
+  border-left: 1px solid var(--bevel-inset-top);
+  border-right: 1px solid var(--bevel-inset-bottom);
+  border-bottom: 1px solid var(--bevel-inset-bottom);
+  color: var(--text-main);
+}
+.btn-del-clip {
+  background: rgba(255, 60, 60, 0.2);
+  border-top: 2px solid var(--bevel-top-light);
+  border-left: 2px solid var(--bevel-top-light);
+  border-right: 2px solid var(--bevel-bottom-dark);
+  border-bottom: 2px solid var(--bevel-bottom-dark);
+  color: #ff6666;
+  width: 24px;
+  height: 24px;
+  font-weight: bold;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.viz-controls-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.viz-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--item-bg);
+  padding: 8px;
+  border-top: 2px solid var(--bevel-top-light);
+  border-left: 2px solid var(--bevel-top-light);
+  border-right: 2px solid var(--bevel-bottom-dark);
+  border-bottom: 2px solid var(--bevel-bottom-dark);
+  transition: opacity 0.2s ease;
+}
+.viz-row.disabled-mode {
+  opacity: 0.5;
+}
+.viz-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.viz-row-header label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0;
+  cursor: pointer;
+  color: var(--text-main);
+}
+.viz-opacity-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.viz-opacity-control span {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  width: 75px;
+  font-weight: 600;
+}
+.viz-opacity-val {
+  font-size: 0.68rem;
+  color: var(--accent-color);
+  font-weight: bold;
+  width: 35px;
+  text-align: right;
+}
+.toggle-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 6px;
+}
+.toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--item-bg);
+  padding: 6px 8px;
+  border-top: 2px solid var(--bevel-top-light);
+  border-left: 2px solid var(--bevel-top-light);
+  border-right: 2px solid var(--bevel-bottom-dark);
+  border-bottom: 2px solid var(--bevel-bottom-dark);
+  font-size: 0.72rem;
+  color: var(--text-main);
+  font-weight: 600;
+}
+.toggle-item input[type="checkbox"], .viz-row-header input[type="checkbox"] {
+  accent-color: var(--accent-color);
+  width: 14px;
+  height: 14px;
+}
+.preset-btn-group {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.btn-preset {
+  flex: 1;
+  padding: 6px;
+  background: var(--panel-bg);
+  border-top: 2px solid var(--bevel-top-light);
+  border-left: 2px solid var(--bevel-top-light);
+  border-right: 2px solid var(--bevel-bottom-dark);
+  border-bottom: 2px solid var(--bevel-bottom-dark);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+.btn-preset:active, .btn-preset.active {
+  background: var(--accent-color);
+  color: #fff;
+  border-top: 2px solid var(--bevel-bottom-dark);
+  border-left: 2px solid var(--bevel-bottom-dark);
+  border-right: 2px solid var(--bevel-top-light);
+  border-bottom: 2px solid var(--bevel-top-light);
+}
+.bpm-bar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+.btn-tap {
+  padding: 8px 12px;
+  background: var(--panel-bg);
+  border-top: 2px solid var(--bevel-top-light);
+  border-left: 2px solid var(--bevel-top-light);
+  border-right: 2px solid var(--bevel-bottom-dark);
+  border-bottom: 2px solid var(--bevel-bottom-dark);
+  color: var(--text-main);
+  font-size: 0.75rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+.slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+}
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+input[type="range"] {
+  width: 100%;
+  height: 18px;
+  accent-color: var(--accent-color);
+}
+input[type="range"]:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+button.btn-primary, button.btn-aux, button.btn-action, button.btn-record, button.btn-secondary {
+  width: 100%;
+  padding: 10px;
+  border-top: 2px solid var(--bevel-top-light);
+  border-left: 2px solid var(--bevel-top-light);
+  border-right: 2px solid var(--bevel-bottom-dark);
+  border-bottom: 2px solid var(--bevel-bottom-dark);
+  font-size: 0.85rem;
+  font-weight: bold;
+  margin-top: 6px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+button.btn-primary { background: var(--accent-color); color: #fff; }
+button.btn-aux { background: #d97706; color: #fff; }
+button.btn-aux.active { background: #059669; }
+button.btn-action { background: #2563eb; color: #fff; }
+button.btn-record { background: #991b1b; color: #fff; }
+button.btn-secondary { background: rgba(255, 50, 50, 0.15); color: #ff8888; }
+#toggle-ui-btn {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  z-index: 20;
+  background: var(--panel-bg);
+  border-top: 2px solid var(--bevel-top-light);
+  border-left: 2px solid var(--bevel-top-light);
+  border-right: 2px solid var(--bevel-bottom-dark);
+  border-bottom: 2px solid var(--bevel-bottom-dark);
+  color: var(--text-main);
+  width: 48px;
+  height: 48px;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+#status-text {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+  font-weight: 600;
+}
+.hotkey-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 2px dashed var(--panel-border);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+.hotkey-grid span { display: flex; justify-content: space-between; }
+.hotkey-grid kbd {
+  background: var(--input-bg);
+  border-top: 1px solid var(--bevel-inset-top);
+  border-left: 1px solid var(--bevel-inset-top);
+  border-right: 1px solid var(--bevel-inset-bottom);
+  border-bottom: 1px solid var(--bevel-inset-bottom);
+  padding: 1px 4px;
+  color: var(--text-main);
+  font-family: monospace;
+}
+</style>
+</head>
+<body>
+<div id="stage" class="crt-active">
+  <div id="screen-frame">
+    <div id="video-container">
+      <video id="bg-video-1" class="vid-layer active" autoplay loop muted playsinline webkit-playsinline></video>
+      <video id="bg-video-2" class="vid-layer" autoplay loop muted playsinline webkit-playsinline></video>
+      <canvas id="fallback-canvas"></canvas>
+    </div>
+    <div id="flash-overlay"></div>
+    <div id="crt-overlay"></div>
+    <canvas id="wave-canvas"></canvas>
+    <div id="lyrics-container"></div>
+  </div>
+</div>
+
+<button id="toggle-ui-btn" title="Toggle Menu (H)">⚙️</button>
+
+<div id="ui-layer">
+  <div class="ui-header">
+    <h1>Sunny's Visualizer</h1>
+    <button id="theme-toggle-btn" class="theme-toggle-btn">☀️ Light Mode</button>
+  </div>
+
+  <div class="badge-container">
+    <span id="color-badge" class="color-badge">Active Color: Cyan</span>
+  </div>
+
+  <!-- Media Section -->
+  <div class="section-title">1. Media Library & Real-Time Input</div>
+  <div class="file-box">
+    <label>Song Queue (.mp3, .wav, .m4a)</label>
+    <input type="file" id="audio-input" accept="audio/*" multiple>
+    <div class="clip-list-container">
+      <div id="audio-queue-list"></div>
+    </div>
+    <button id="aux-btn" class="btn-aux">🎙️ ENABLE REAL-TIME AUX / MIC INPUT</button>
+  </div>
+
+  <div class="file-box">
+    <label>Video Clips (.mp4, .mov, .webm)</label>
+    <input type="file" id="video-input" accept="video/*" multiple>
+    <div class="clip-list-container">
+      <div id="clip-list"></div>
+    </div>
+  </div>
+
+  <!-- Presets & Rhythm Section -->
+  <div class="section-title">2. Genre & Rhythm Sync</div>
+  <div class="preset-btn-group">
+    <button class="btn-preset active" onclick="applyPreset(this, 'default')">Default (1)</button>
+    <button class="btn-preset" onclick="applyPreset(this, 'lofi')">Lo-Fi (2)</button>
+    <button class="btn-preset" onclick="applyPreset(this, 'edm')">EDM (3)</button>
+    <button class="btn-preset" onclick="applyPreset(this, 'trap')">Trap (4)</button>
+  </div>
+
+  <div class="preset-btn-group" style="margin-top: 4px;">
+    <button class="btn-preset" onclick="applyVizPreset('cyberpunk')">Cyberpunk</button>
+    <button class="btn-preset" onclick="applyVizPreset('clean')">Clean</button>
+    <button class="btn-preset" onclick="applyVizPreset('arcade')">Arcade</button>
+    <button class="btn-preset" onclick="applyVizPreset('space')">Space</button>
+  </div>
+
+  <div class="bpm-bar">
+    <button id="tap-btn" class="btn-tap">TAP TEMPO (T)</button>
+    <span id="bpm-val" style="font-size: 0.8rem; color: var(--text-muted); font-weight: bold;">BPM: --</span>
+    <select id="bar-sync-select" style="margin-left: auto; width: 110px;">
+      <option value="off">Sync: Off</option>
+      <option value="1">Every 1 Beat</option>
+      <option value="2">Every 2 Beats</option>
+      <option value="4" selected>Every 4 Beats</option>
+      <option value="8">Every 8 Beats</option>
+    </select>
+  </div>
+
+  <!-- Visualizers & FX Section -->
+  <div class="section-title">3. Multi-Visualizer Engine & Opacity Sliders</div>
+  <label style="font-size: 0.68rem; color: var(--text-muted); margin-bottom: 4px;">Enable visualizers & adjust individual layer opacity sliders below:</label>
+  
+  <div class="viz-controls-list">
+    <!-- Smooth Ring -->
+    <div class="viz-row" id="viz-row-ring">
+      <div class="viz-row-header">
+        <label>
+          <input type="checkbox" id="viz-ring" class="chk-viz-mode" value="ring" checked> Smooth Ring
+        </label>
+      </div>
+      <div class="viz-opacity-control">
+        <span>Layer Opacity</span>
+        <input type="range" class="viz-opacity-slider" data-viz="ring" min="0" max="100" value="100">
+        <span class="viz-opacity-val" id="val-opacity-ring">100%</span>
+      </div>
+    </div>
+
+    <!-- Sharp Line -->
+    <div class="viz-row" id="viz-row-line">
+      <div class="viz-row-header">
+        <label>
+          <input type="checkbox" id="viz-line" class="chk-viz-mode" value="line" checked> Sharp Line
+        </label>
+      </div>
+      <div class="viz-opacity-control">
+        <span>Layer Opacity</span>
+        <input type="range" class="viz-opacity-slider" data-viz="line" min="0" max="100" value="100">
+        <span class="viz-opacity-val" id="val-opacity-line">100%</span>
+      </div>
+    </div>
+
+    <!-- Spectrum Bars -->
+    <div class="viz-row" id="viz-row-bars">
+      <div class="viz-row-header">
+        <label>
+          <input type="checkbox" id="viz-bars" class="chk-viz-mode" value="bars"> Spectrum Bars
+        </label>
+      </div>
+      <div class="viz-opacity-control">
+        <span>Layer Opacity</span>
+        <input type="range" class="viz-opacity-slider" data-viz="bars" min="0" max="100" value="100">
+        <span class="viz-opacity-val" id="val-opacity-bars">100%</span>
+      </div>
+    </div>
+
+    <!-- Particles -->
+    <div class="viz-row" id="viz-row-particles">
+      <div class="viz-row-header">
+        <label>
+          <input type="checkbox" id="viz-particles" class="chk-viz-mode" value="particles"> Particles
+        </label>
+      </div>
+      <div class="viz-opacity-control">
+        <span>Layer Opacity</span>
+        <input type="range" class="viz-opacity-slider" data-viz="particles" min="0" max="100" value="100">
+        <span class="viz-opacity-val" id="val-opacity-particles">100%</span>
+      </div>
+    </div>
+
+    <!-- Bass Pulse Orb -->
+    <div class="viz-row" id="viz-row-orb">
+      <div class="viz-row-header">
+        <label>
+          <input type="checkbox" id="viz-orb" class="chk-viz-mode" value="orb"> Bass Pulse Orb
+        </label>
+      </div>
+      <div class="viz-opacity-control">
+        <span>Layer Opacity</span>
+        <input type="range" class="viz-opacity-slider" data-viz="orb" min="0" max="100" value="100">
+        <span class="viz-opacity-val" id="val-opacity-orb">100%</span>
+      </div>
+    </div>
+
+    <!-- Starfield Drive -->
+    <div class="viz-row" id="viz-row-starfield">
+      <div class="viz-row-header">
+        <label>
+          <input type="checkbox" id="viz-starfield" class="chk-viz-mode" value="starfield"> Starfield Drive
+        </label>
+      </div>
+      <div class="viz-opacity-control">
+        <span>Layer Opacity</span>
+        <input type="range" class="viz-opacity-slider" data-viz="starfield" min="0" max="100" value="100">
+        <span class="viz-opacity-val" id="val-opacity-starfield">100%</span>
+      </div>
+    </div>
+
+    <!-- 3D Cyber Grid Horizon -->
+    <div class="viz-row" id="viz-row-cybergrid">
+      <div class="viz-row-header">
+        <label>
+          <input type="checkbox" id="viz-cybergrid" class="chk-viz-mode" value="cybergrid"> 3D Cyber Grid Horizon
+        </label>
+      </div>
+      <div class="viz-opacity-control">
+        <span>Layer Opacity</span>
+        <input type="range" class="viz-opacity-slider" data-viz="cybergrid" min="0" max="100" value="100">
+        <span class="viz-opacity-val" id="val-opacity-cybergrid">100%</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="toggle-grid" style="margin-top:8px;">
+    <label class="toggle-item">
+      <input type="checkbox" id="chk-zoom" checked> Video Zoom Shake [Z]
+    </label>
+    <label class="toggle-item">
+      <input type="checkbox" id="chk-mirror" checked> Center-Symmetry
+    </label>
+    <label class="toggle-item">
+      <input type="checkbox" id="chk-flash" checked> Cut Flash FX
+    </label>
+    <label class="toggle-item">
+      <input type="checkbox" id="chk-hihat" checked> Hi-Hat Jitter
+    </label>
+    <label class="toggle-item">
+      <input type="checkbox" id="chk-crt" checked> CRT Filter [C]
+    </label>
+    <label class="toggle-item">
+      <input type="checkbox" id="chk-dynamic-color" checked> Dynamic Color
+    </label>
+  </div>
+
+  <!-- Lyric Transcription Studio Section -->
+  <div class="section-title">4. Lyric Transcription Studio (Multilingual AI)</div>
+  <div class="file-box">
+    <label>Lyric Layout Mode</label>
+    <select id="lyric-mode-select">
+      <option value="off">Disabled / Off</option>
+      <option value="opt1">Option 1: Fullscreen Word Focus</option>
+      <option value="opt2" selected>Option 2: Bottom Karaoke Stream</option>
+      <option value="opt3">Option 3: Centered Active Line</option>
+      <option value="opt4">Option 4: Left-Column Waterfall</option>
+    </select>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px;">
+      <div>
+        <label>Typography Font</label>
+        <select id="lyric-font-select">
+          <option value="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">Modern Sans</option>
+          <option value="'Impact', 'Arial Black', sans-serif">Impact / Bold</option>
+          <option value="'Georgia', 'Times New Roman', serif">Retro Serif</option>
+          <option value="'Courier New', Courier, monospace">Arcade Monospace</option>
+          <option value="'Trebuchet MS', sans-serif">Clean Display</option>
+        </select>
+      </div>
+      <div>
+        <label>Text Opacity</label>
+        <input type="range" id="lyric-opacity-slider" min="10" max="100" value="90">
+      </div>
+    </div>
+
+    <!-- Speech AI Language Selection -->
+    <div style="margin-top: 6px;">
+      <label>Speech AI Language Mode</label>
+      <select id="lyric-lang-select">
+        <option value="ja-JP">Japanese (日本語 ja-JP)</option>
+        <option value="en-US" selected>English (United States en-US)</option>
+        <option value="en-GB">English (United Kingdom en-GB)</option>
+        <option value="ko-KR">Korean (한국어 ko-KR)</option>
+        <option value="zh-CN">Chinese (Mandarin zh-CN)</option>
+        <option value="es-ES">Spanish (Español es-ES)</option>
+        <option value="fr-FR">French (Français fr-FR)</option>
+      </select>
+    </div>
+
+    <button id="btn-auto-transcribe" class="btn-action" style="margin-top: 6px; background: #8b5cf6;">🗣️ START AUTO-TRANSCRIBE LYRICS (SPEECH AI)</button>
+
+    <div style="margin-top: 6px;">
+      <label>Transcription / Lyrics (Plain Text or LRC Timestamps)</label>
+      <textarea id="lyric-text-input" placeholder="Paste lyrics or timestamps here...&#10;[00:12.30] Welcome to Sunny's Visualizer&#10;[00:16.00] 日本語の歌詞も自動対応しています！"></textarea>
+    </div>
+  </div>
+
+  <!-- Sensitivity Controls -->
+  <div class="section-title">5. Sensitivity & Dynamics</div>
+  <div class="slider-row">
+    <div class="slider-label">
+      <span>Master Intensity</span>
+      <span id="intensity-val">100%</span>
+    </div>
+    <input type="range" id="visualizer-intensity" min="0" max="200" value="100">
+  </div>
+
+  <div class="slider-row">
+    <div class="slider-label">
+      <span>FFT Wave Smoothness</span>
+      <span id="smooth-val">0.80</span>
+    </div>
+    <input type="range" id="smooth-slider" min="0.10" max="0.95" step="0.05" value="0.80">
+  </div>
+
+  <div class="slider-row">
+    <div class="slider-label">
+      <span>Zoom Punch Intensity</span>
+      <span id="zoom-int-val">8%</span>
+    </div>
+    <input type="range" id="zoom-int-slider" min="1" max="25" value="8">
+  </div>
+
+  <div class="slider-row">
+    <div class="slider-label">
+      <span>Min Time Between Cuts</span>
+      <span id="hold-val">1.8s</span>
+    </div>
+    <input type="range" id="hold-slider" min="0.4" max="4.0" step="0.1" value="1.8">
+  </div>
+
+  <div class="slider-row">
+    <div class="slider-label">
+      <span>Bass Volume Required</span>
+      <span id="sens-val">150</span>
+    </div>
+    <input type="range" id="sens-slider" min="80" max="220" value="150">
+  </div>
+
+  <div class="slider-row">
+    <div class="slider-label">
+      <span>Pause Cuts Below Volume</span>
+      <span id="quiet-val">30</span>
+    </div>
+    <input type="range" id="quiet-slider" min="5" max="80" value="30">
+  </div>
+
+  <!-- Controls & Capture -->
+  <button id="start-btn" class="btn-primary">START / PAUSE [P]</button>
+  <button id="rnd-clip-btn" class="btn-action">🔀 RANDOM CLIP (SPACE)</button>
+  <button id="rec-btn" class="btn-record">RECORD CANVAS OUTPUT [R]</button>
+  <button id="clear-btn" class="btn-secondary">Clear Saved Media</button>
+
+  <div id="status-text">Checking saved files...</div>
+
+  <!-- Hotkey Legend -->
+  <div class="hotkey-grid">
+    <span><kbd>Space</kbd> Cut Clip</span>
+    <span><kbd>P</kbd> Play / Pause</span>
+    <span><kbd>Hold N</kbd> Lock Clip</span>
+    <span><kbd>M</kbd>/<kbd>B</kbd> Next / Prev Song</span>
+    <span><kbd>L</kbd> Advance Lyrics</span>
+    <span><kbd>X</kbd> Toggle Visualizers</span>
+    <span><kbd>C</kbd> CRT Filter</span>
+    <span><kbd>Z</kbd> Zoom Shake</span>
+    <span><kbd>T</kbd> Tap Tempo</span>
+    <span><kbd>R</kbd> Record Output</span>
+    <span><kbd>1-4</kbd> Presets</span>
+    <span><kbd>H</kbd> Toggle UI</span>
+    <span><kbd>F</kbd> Fullscreen</span>
+  </div>
+</div>
+
+<script>
+let videoClips = [];
+let recentClips = [];
+
+let audioQueue = [];
+let currentAudioIndex = 0;
+let currentAudioObjectURL = null;
+
+let audioCtx = null;
+let analyser = null;
+let audioEl = new Audio();
+audioEl.crossOrigin = "anonymous";
+let audioSourceNode = null;
+let auxSourceNode = null;
+let auxStream = null;
+let isAuxActive = false;
+
+let audioDestNode = null;
+let isPlaying = false;
+let lastBeatTime = 0;
+
+let currentClipObject = null;
+let lastDynamicColorCheckTime = 0;
+
+let animFrameId = null;
+
+let zoomCurrentScale = 1.0;
+let zoomTargetScale = 1.0;
+let zoomCurrentRot = 0;
+
+let vizEnabled = true;
+let isNHeld = false;
+
+let tapTimes = [];
+let detectedBPM = 0;
+
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRecording = false;
+
+let particles = [];
+let starfield = [];
+
+let parsedLyrics = [];
+let lyricWordsList = [];
+let currentWordIndex = -1;
+let currentLineIdx = 0;
+let lastLyricAdvanceTime = 0;
+let waterfallHistory = [];
+
+let videoA = document.getElementById('bg-video-1');
+let videoB = document.getElementById('bg-video-2');
+let activeVideo = videoA;
+let inactiveVideo = videoB;
+let currentVideoLayer = 1;
+
+const canvas = document.getElementById('wave-canvas');
+const ctx = canvas.getContext('2d');
+
+const fallbackCanvas = document.getElementById('fallback-canvas');
+const fallbackCtx = fallbackCanvas.getContext('2d');
+
+const vizCanvas = document.createElement('canvas');
+const vizCtx = vizCanvas.getContext('2d');
+
+const stage = document.getElementById('stage');
+const flashOverlay = document.getElementById('flash-overlay');
+const uiLayer = document.getElementById('ui-layer');
+const lyricsContainer = document.getElementById('lyrics-container');
+
+const startBtn = document.getElementById('start-btn');
+const auxBtn = document.getElementById('aux-btn');
+const rndClipBtn = document.getElementById('rnd-clip-btn');
+const recBtn = document.getElementById('rec-btn');
+const clearBtn = document.getElementById('clear-btn');
+const toggleUiBtn = document.getElementById('toggle-ui-btn');
+const statusText = document.getElementById('status-text');
+const colorBadge = document.getElementById('color-badge');
+const tapBtn = document.getElementById('tap-btn');
+const bpmVal = document.getElementById('bpm-val');
+const autoTranscribeBtn = document.getElementById('btn-auto-transcribe');
+const themeToggleBtn = document.getElementById('theme-toggle-btn');
+const barSyncSelect = document.getElementById('bar-sync-select');
+
+const sensSlider = document.getElementById('sens-slider');
+const quietSlider = document.getElementById('quiet-slider');
+const holdSlider = document.getElementById('hold-slider');
+const zoomIntSlider = document.getElementById('zoom-int-slider');
+const smoothSlider = document.getElementById('smooth-slider');
+const visualizerIntensity = document.getElementById('visualizer-intensity');
+const intensityVal = document.getElementById('intensity-val');
+
+const chkZoom = document.getElementById('chk-zoom');
+const chkFlash = document.getElementById('chk-flash');
+const chkHihat = document.getElementById('chk-hihat');
+const chkCrt = document.getElementById('chk-crt');
+const chkDynamicColor = document.getElementById('chk-dynamic-color');
+const chkMirror = document.getElementById('chk-mirror');
+
+const lyricModeSelect = document.getElementById('lyric-mode-select');
+const lyricFontSelect = document.getElementById('lyric-font-select');
+const lyricOpacitySlider = document.getElementById('lyric-opacity-slider');
+const lyricLangSelect = document.getElementById('lyric-lang-select');
+const lyricTextInput = document.getElementById('lyric-text-input');
+
+let frequencyData = null;
+let beatCount = 0;
+let lastFrameTime = performance.now();
+let bassAverage = 0;
+
+let visualizerColor = '#00ffff';
+
+const visualizerOpacity = {
+  ring: 1.0,
+  line: 1.0,
+  bars: 1.0,
+  particles: 1.0,
+  orb: 1.0,
+  starfield: 1.0,
+  cybergrid: 1.0
+};
+
+const VISUALIZER_PRESETS = {
+  cyberpunk: { ring: true, line: true, bars: false, particles: true, orb: true, starfield: true, cybergrid: true },
+  clean: { ring: true, line: true, bars: false, particles: false, orb: false, starfield: false, cybergrid: false },
+  arcade: { ring: false, line: true, bars: true, particles: true, orb: true, starfield: false, cybergrid: true },
+  space: { ring: true, line: false, bars: false, particles: true, orb: true, starfield: true, cybergrid: false }
+};
+
+const COLOR_HEX = {
+  'Red': '#e11d48', 'Orange': '#f97316', 'Yellow': '#eab308', 'Green': '#107c41',
+  'Cyan': '#06b6d4', 'Blue': '#3b82f6', 'Purple': '#a855f7', 'Pink': '#ec4899'
+};
+
+let isLightMode = localStorage.getItem('sunny_theme') === 'light';
+if (isLightMode) {
+  document.body.classList.add('light-mode');
+  themeToggleBtn.innerText = '🌙 Dark Mode';
+}
+
+themeToggleBtn.addEventListener('click', () => {
+  isLightMode = !isLightMode;
+  if (isLightMode) {
+    document.body.classList.add('light-mode');
+    themeToggleBtn.innerText = '🌙 Dark Mode';
+    localStorage.setItem('sunny_theme', 'light');
+  } else {
+    document.body.classList.remove('light-mode');
+    themeToggleBtn.innerText = '☀️ Light Mode';
+    localStorage.setItem('sunny_theme', 'dark');
+  }
+});
+
+sensSlider.addEventListener('input', (e) => { document.getElementById('sens-val').innerText = e.target.value; });
+holdSlider.addEventListener('input', (e) => { document.getElementById('hold-val').innerText = `${e.target.value}s`; });
+quietSlider.addEventListener('input', (e) => { document.getElementById('quiet-val').innerText = e.target.value; });
+zoomIntSlider.addEventListener('input', (e) => { document.getElementById('zoom-int-val').innerText = `${e.target.value}%`; });
+visualizerIntensity.addEventListener('input', (e) => { intensityVal.innerText = `${e.target.value}%`; });
+
+smoothSlider.addEventListener('input', (e) => {
+  document.getElementById('smooth-val').innerText = parseFloat(e.target.value).toFixed(2);
+  if (analyser) analyser.smoothingTimeConstant = parseFloat(e.target.value);
+});
+
+function setupOpacitySliders() {
+  document.querySelectorAll('.viz-opacity-slider').forEach(slider => {
+    const mode = slider.getAttribute('data-viz');
+    const chk = document.getElementById(`viz-${mode}`);
+    const row = document.getElementById(`viz-row-${mode}`);
+    
+    const updateState = () => {
+      const isChecked = chk && chk.checked;
+      slider.disabled = !isChecked;
+      if (row) {
+        if (isChecked) row.classList.remove('disabled-mode');
+        else row.classList.add('disabled-mode');
+      }
+      visualizerOpacity[mode] = (slider.value / 100);
+      const valSpan = document.getElementById(`val-opacity-${mode}`);
+      if (valSpan) valSpan.innerText = `${slider.value}%`;
+    };
+
+    slider.addEventListener('input', (e) => {
+      visualizerOpacity[mode] = (e.target.value / 100);
+      const valSpan = document.getElementById(`val-opacity-${mode}`);
+      if (valSpan) valSpan.innerText = `${e.target.value}%`;
+    });
+
+    if (chk) {
+      chk.addEventListener('change', updateState);
+    }
+    updateState();
+  });
+}
+
+function applyVizPreset(name) {
+  const preset = VISUALIZER_PRESETS[name];
+  if (!preset) return;
+  Object.entries(preset).forEach(([id, enabled]) => {
+    const checkbox = document.getElementById(`viz-${id}`);
+    if (checkbox) {
+      checkbox.checked = enabled;
+      checkbox.dispatchEvent(new Event('change'));
+    }
+  });
+}
+
+function initStarfield(w, h) {
+  starfield = [];
+  for (let i = 0; i < 120; i++) {
+    starfield.push({
+      x: (Math.random() - 0.5) * w,
+      y: (Math.random() - 0.5) * h,
+      z: Math.random() * w + 1
+    });
+  }
+}
+
+function resizeCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  const width = Math.round(rect.width);
+  const height = Math.round(rect.height);
+
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+
+  fallbackCanvas.width = Math.round(width * dpr);
+  fallbackCanvas.height = Math.round(height * dpr);
+
+  vizCanvas.width = Math.round(width * dpr);
+  vizCanvas.height = Math.round(height * dpr);
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fallbackCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  vizCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  initStarfield(width, height);
+}
+window.addEventListener('resize', resizeCanvas);
+
+chkCrt.addEventListener('change', (e) => {
+  if (e.target.checked) stage.classList.add('crt-active');
+  else stage.classList.remove('crt-active');
+});
+
+toggleUiBtn.addEventListener('click', () => { uiLayer.classList.toggle('hidden'); });
+
+lyricFontSelect.addEventListener('change', (e) => {
+  document.documentElement.style.setProperty('--lyric-font', e.target.value);
+});
+lyricOpacitySlider.addEventListener('input', (e) => {
+  document.documentElement.style.setProperty('--lyric-opacity', e.target.value / 100);
+});
+lyricModeSelect.addEventListener('change', () => { renderLyrics(); });
+lyricTextInput.addEventListener('input', () => { parseLyricInput(); });
+
+autoTranscribeBtn.addEventListener('click', () => {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    statusText.innerText = "Speech AI not supported in this browser. Paste lyrics manually.";
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = lyricLangSelect.value;
+
+  let transcribedText = lyricTextInput.value;
+
+  recognition.onresult = (event) => {
+    let currentTranscript = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      if (event.results[i].isFinal) {
+        transcribedText += (transcribedText ? '\n' : '') + event.results[i][0].transcript;
+      } else {
+        currentTranscript += event.results[i][0].transcript;
+      }
+    }
+    lyricTextInput.value = transcribedText + (currentTranscript ? '\n' + currentTranscript : '');
+    parseLyricInput();
+  };
+
+  recognition.onerror = (e) => { statusText.innerText = `Speech AI error (${recognition.lang}): ${e.error}`; };
+  recognition.onend = () => { statusText.innerText = "Auto-transcription stopped."; };
+
+  try {
+    recognition.start();
+    statusText.innerText = `Speech AI Active (${lyricLangSelect.value}). Listening...`;
+  } catch (err) {
+    statusText.innerText = "Transcription already active or blocked.";
+  }
+});
+
+// Split words taking into account Japanese / CJK characters without spaces
+function tokenizeLyricText(text) {
+  const isCJK = /[\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\uff00-\uffef\u4e00-\u9faf\u1100-\u11ff\u3130-\u318f\ua960-\ua97f\ud7b0-\ud7ff]/.test(text);
+  
+  if (isCJK && !text.includes(' ')) {
+    // Chunk Japanese / CJK into 2-3 char tokens or single chars for smooth karaoke reading
+    const tokens = [];
+    for (let i = 0; i < text.length; i += 2) {
+      tokens.push(text.substr(i, 2));
+    }
+    return tokens;
+  }
+  return text.split(/\s+/).filter(w => w.length > 0);
+}
+
+function parseLyricInput() {
+  const raw = lyricTextInput.value.trim();
+  parsedLyrics = [];
+  lyricWordsList = [];
+  waterfallHistory = [];
+  currentWordIndex = -1;
+  currentLineIdx = 0;
+
+  if (!raw) { renderLyrics(); return; }
+
+  const lines = raw.split('\n');
+  const lrcRegex = /^\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/;
+  const rawParsedLines = [];
+
+  lines.forEach((lineStr) => {
+    const trimmed = lineStr.trim();
+    if (!trimmed) return;
+
+    const match = trimmed.match(lrcRegex);
+    if (match) {
+      const mins = parseInt(match[1], 10);
+      const secs = parseInt(match[2], 10);
+      const ms = parseInt(match[3], 10) * (match[3].length === 2 ? 10 : 1);
+      const timeSecs = mins * 60 + secs + ms / 1000;
+      const text = match[4].trim();
+      if (text) rawParsedLines.push({ time: timeSecs, text });
+    } else {
+      rawParsedLines.push({ time: null, text: trimmed });
+    }
+  });
+
+  const hasTimestamps = rawParsedLines.some(l => l.time !== null);
+
+  if (hasTimestamps) {
+    rawParsedLines.sort((a, b) => (a.time || 0) - (b.time || 0));
+
+    for (let i = 0; i < rawParsedLines.length; i++) {
+      const line = rawParsedLines[i];
+      const nextLine = rawParsedLines[i + 1];
+      const words = tokenizeLyricText(line.text);
+
+      const lineStartTime = line.time !== null ? line.time : 0;
+      const lineEndTime = (nextLine && nextLine.time !== null && nextLine.time > lineStartTime)
+        ? nextLine.time
+        : lineStartTime + Math.max(2.5, words.length * 0.45);
+
+      const lineDuration = lineEndTime - lineStartTime;
+      const totalChars = line.text.length || 1;
+
+      let wordAccTime = lineStartTime;
+      const parsedWords = [];
+
+      words.forEach((w) => {
+        const wordDuration = (w.length / totalChars) * lineDuration;
+        const wStart = wordAccTime;
+        const wEnd = wStart + wordDuration;
+        wordAccTime = wEnd;
+
+        const wordObj = { word: w, startTime: wStart, endTime: wEnd, lineIdx: i };
+        parsedWords.push(wordObj);
+        lyricWordsList.push(wordObj);
+      });
+
+      parsedLyrics.push({ time: lineStartTime, endTime: lineEndTime, text: line.text, words: parsedWords });
+    }
+  } else {
+    rawParsedLines.forEach((line, i) => {
+      const words = tokenizeLyricText(line.text);
+      const parsedWords = words.map(w => ({ word: w, startTime: null, endTime: null, lineIdx: i }));
+      parsedWords.forEach(w => lyricWordsList.push(w));
+      parsedLyrics.push({ time: null, text: line.text, words: parsedWords });
+    });
+  }
+
+  renderLyrics();
+}
+
+function advanceLyricsManual() {
+  if (lyricWordsList.length === 0) return;
+  currentWordIndex = (currentWordIndex + 1) % lyricWordsList.length;
+  const currentItem = lyricWordsList[currentWordIndex];
+  if (currentItem) currentLineIdx = currentItem.lineIdx;
+
+  if (lyricModeSelect.value === 'opt4' && currentItem) {
+    waterfallHistory.push(currentItem.word);
+    if (waterfallHistory.length > 8) waterfallHistory.shift();
+  }
+  renderLyrics();
+}
+
+function updateLyricsSync(currentTimeSec) {
+  const mode = lyricModeSelect.value;
+  if (mode === 'off' || lyricWordsList.length === 0) return;
+
+  const hasTimestamps = lyricWordsList.some(w => w.startTime !== null);
+
+  if (hasTimestamps) {
+    let activeWordIndex = -1;
+    for (let i = 0; i < lyricWordsList.length; i++) {
+      if (currentTimeSec >= lyricWordsList[i].startTime) {
+        activeWordIndex = i;
+      }
+    }
+
+    if (activeWordIndex !== -1 && activeWordIndex !== currentWordIndex) {
+      currentWordIndex = activeWordIndex;
+      currentLineIdx = lyricWordsList[currentWordIndex].lineIdx;
+
+      if (mode === 'opt4') {
+        waterfallHistory.push(lyricWordsList[currentWordIndex].word);
+        if (waterfallHistory.length > 8) waterfallHistory.shift();
+      }
+      renderLyrics();
+    }
+  } else {
+    const now = performance.now();
+    const advanceInterval = detectedBPM > 0 ? (60000 / detectedBPM) * 0.9 : 1200;
+    if (now - lastLyricAdvanceTime > advanceInterval) {
+      lastLyricAdvanceTime = now;
+      advanceLyricsManual();
+    }
+  }
+}
+
+function renderLyrics() {
+  const mode = lyricModeSelect.value;
+  lyricsContainer.className = `mode-${mode}`;
+  lyricsContainer.innerHTML = '';
+
+  if (mode === 'off' || lyricWordsList.length === 0) return;
+
+  const currentWordObj = lyricWordsList[currentWordIndex] || { word: '', lineIdx: 0 };
+  const currentLineObj = parsedLyrics[currentLineIdx] || { text: '', words: [] };
+
+  if (mode === 'opt1') {
+    const el = document.createElement('div');
+    el.className = 'lyric-word-giant';
+    el.innerText = currentWordObj.word;
+    lyricsContainer.appendChild(el);
+  } else if (mode === 'opt2') {
+    const prevLine = parsedLyrics[Math.max(0, currentLineIdx - 1)];
+    if (prevLine && currentLineIdx > 0) {
+      const elPrev = document.createElement('div');
+      elPrev.className = 'lyric-line-subtle';
+      elPrev.style.opacity = '0.5';
+      elPrev.innerText = prevLine.text;
+      lyricsContainer.appendChild(elPrev);
+    }
+
+    const elCurr = document.createElement('div');
+    elCurr.className = 'lyric-line-subtle';
+
+    (currentLineObj.words || []).forEach((wObj) => {
+      const span = document.createElement('span');
+      const idx = lyricWordsList.indexOf(wObj);
+      span.className = 'lyric-word' + (idx === currentWordIndex ? ' active' : '');
+      span.innerText = wObj.word + ' ';
+      elCurr.appendChild(span);
+    });
+
+    lyricsContainer.appendChild(elCurr);
+  } else if (mode === 'opt3') {
+    const el = document.createElement('div');
+    el.className = 'lyric-phrase-mid';
+
+    (currentLineObj.words || []).forEach((wObj) => {
+      const span = document.createElement('span');
+      const idx = lyricWordsList.indexOf(wObj);
+      span.className = 'lyric-word' + (idx === currentWordIndex ? ' active' : '');
+      span.innerText = wObj.word + ' ';
+      el.appendChild(span);
+    });
+
+    lyricsContainer.appendChild(el);
+  } else if (mode === 'opt4') {
+    if (waterfallHistory.length === 0 && currentWordObj.word) {
+      waterfallHistory.push(currentWordObj.word);
+    }
+    waterfallHistory.forEach((w) => {
+      const el = document.createElement('div');
+      el.className = 'lyric-waterfall-word';
+      el.innerText = w;
+      lyricsContainer.appendChild(el);
+    });
+  }
+}
+
+let fallbackHue = 0;
+function drawProceduralFallback(intensity) {
+  const w = fallbackCanvas.width;
+  const h = fallbackCanvas.height;
+  if (w === 0 || h === 0) return;
+
+  fallbackHue = (fallbackHue + 0.5 + intensity * 2) % 360;
+  fallbackCtx.fillStyle = `hsl(${fallbackHue}, 60%, 8%)`;
+  fallbackCtx.fillRect(0, 0, w, h);
+
+  const cx = w / 2;
+  const cy = h / 2;
+  const numRings = 6;
+
+  for (let i = 0; i < numRings; i++) {
+    const radius = ((performance.now() * 0.05 + i * 40) % (w * 0.6));
+    fallbackCtx.beginPath();
+    fallbackCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+    fallbackCtx.strokeStyle = `hsla(${(fallbackHue + i * 40) % 360}, 80%, 50%, ${0.15 + intensity * 0.3})`;
+    fallbackCtx.lineWidth = 4 + intensity * 10;
+    fallbackCtx.stroke();
+  }
+}
+
+function switchVideoClip() {
+  const enabledClips = videoClips.filter(c => c.enabled !== false);
+  if (enabledClips.length === 0) {
+    statusText.innerText = "No enabled video clips. Playing procedural background.";
+    return;
+  }
+
+  // Pick a clip excluding recent ones
+  let available = enabledClips.filter(c => !recentClips.includes(c.id));
+  if (available.length === 0) {
+    recentClips = [];
+    available = enabledClips;
+  }
+
+  const selectedClip = available[Math.floor(Math.random() * available.length)];
+  recentClips.push(selectedClip.id);
+  if (recentClips.length > Math.min(3, enabledClips.length - 1)) {
+    recentClips.shift();
+  }
+
+  currentClipObject = selectedClip;
+
+  const nextVid = activeVideo === videoA ? videoB : videoA;
+  const currentVid = activeVideo;
+
+  const playPromise = (async () => {
+    try {
+      if (selectedClip.blob) {
+        nextVid.src = URL.createObjectURL(selectedClip.blob);
+      } else if (selectedClip.url) {
+        nextVid.src = selectedClip.url;
+      } else {
+        return;
+      }
+
+      nextVid.currentTime = selectedClip.trimStart || 0;
+      await nextVid.play();
+
+      nextVid.classList.add('active');
+      currentVid.classList.remove('active');
+
+      activeVideo = nextVid;
+      inactiveVideo = currentVid;
+
+      if (chkFlash.checked) {
+        flashOverlay.classList.add('flash');
+        setTimeout(() => flashOverlay.classList.remove('flash'), 120);
+      }
+
+      statusText.innerText = `Active Clip: ${selectedClip.name}`;
+      if (chkDynamicColor.checked && selectedClip.colorGroup) {
+        visualizerColor = COLOR_HEX[selectedClip.colorGroup] || visualizerColor;
+        colorBadge.innerText = `Active Color: ${selectedClip.colorGroup}`;
+        colorBadge.style.borderColor = visualizerColor;
+      }
+    } catch (e) {
+      statusText.innerText = "Clip play error. Using procedural backdrop.";
+    }
+  })();
+}
+
+function checkClipLooping() {
+  if (!activeVideo || !currentClipObject) return;
+  const trimEnd = currentClipObject.trimEnd || activeVideo.duration;
+  if (trimEnd > 0 && activeVideo.currentTime >= trimEnd) {
+    activeVideo.currentTime = currentClipObject.trimStart || 0;
+  }
+}
+
+function initAudioContext() {
+  if (!audioCtx) {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AudioContext();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = parseFloat(smoothSlider.value);
+    frequencyData = new Uint8Array(analyser.frequencyBinCount);
+
+    audioSourceNode = audioCtx.createMediaElementSource(audioEl);
+    audioSourceNode.connect(analyser);
+    analyser.connect(audioCtx.destination);
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
+
+async function toggleAuxInput() {
+  initAudioContext();
+  if (!isAuxActive) {
+    try {
+      auxStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      auxSourceNode = audioCtx.createMediaStreamSource(auxStream);
+      auxSourceNode.connect(analyser);
+      isAuxActive = true;
+      auxBtn.classList.add('active');
+      auxBtn.innerText = "🎙️ AUX / MIC INPUT ACTIVE (CLICK TO DISABLE)";
+      statusText.innerText = "Real-time microphone input enabled.";
+      if (!isPlaying) togglePlay();
+    } catch (err) {
+      statusText.innerText = "Microphone access denied.";
+    }
+  } else {
+    if (auxStream) {
+      auxStream.getTracks().forEach(track => track.stop());
+    }
+    if (auxSourceNode) {
+      auxSourceNode.disconnect();
+    }
+    isAuxActive = false;
+    auxBtn.classList.remove('active');
+    auxBtn.innerText = "🎙️ ENABLE REAL-TIME AUX / MIC INPUT";
+    statusText.innerText = "Aux input disabled.";
+  }
+}
+auxBtn.addEventListener('click', toggleAuxInput);
+
+function togglePlay() {
+  initAudioContext();
+  if (!isPlaying) {
+    if (audioQueue.length > 0 && !audioEl.src && !isAuxActive) {
+      playAudioIndex(currentAudioIndex);
+    } else if (!isAuxActive) {
+      audioEl.play().catch(() => {});
+    }
+    activeVideo.play().catch(() => {});
+    isPlaying = true;
+    startBtn.innerText = "PAUSE VISUALIZER [P]";
+    statusText.innerText = "Visualizer Engine Active.";
+  } else {
+    audioEl.pause();
+    activeVideo.pause();
+    isPlaying = false;
+    startBtn.innerText = "START VISUALIZER [P]";
+    statusText.innerText = "Paused.";
+  }
+}
+
+tapBtn.addEventListener('click', () => {
+  const now = performance.now();
+  tapTimes.push(now);
+  if (tapTimes.length > 5) tapTimes.shift();
+
+  if (tapTimes.length > 1) {
+    const intervals = [];
+    for (let i = 1; i < tapTimes.length; i++) {
+      intervals.push(tapTimes[i] - tapTimes[i - 1]);
+    }
+    const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+    detectedBPM = Math.round(60000 / avgInterval);
+    bpmVal.innerText = `BPM: ${detectedBPM}`;
+  }
+});
+
+function drawVisualizers(freq, bassNorm) {
+  const w = canvas.width / (window.devicePixelRatio || 1);
+  const h = canvas.height / (window.devicePixelRatio || 1);
+  const masterInt = parseFloat(visualizerIntensity.value) / 100;
+  const isMirror = chkMirror.checked;
+
+  vizCtx.clearRect(0, 0, vizCanvas.width, vizCanvas.height);
+  const cx = w / 2;
+  const cy = h / 2;
+
+  // 1. Smooth Ring
+  if (document.getElementById('viz-ring').checked && visualizerOpacity.ring > 0) {
+    vizCtx.save();
+    vizCtx.globalAlpha = visualizerOpacity.ring * masterInt;
+    vizCtx.strokeStyle = visualizerColor;
+    vizCtx.lineWidth = 3 + bassNorm * 6;
+
+    const radius = Math.min(w, h) * 0.22 + bassNorm * 25;
+    const numPoints = 64;
+
+    vizCtx.beginPath();
+    for (let i = 0; i <= numPoints; i++) {
+      const idx = Math.floor((i / numPoints) * (freq.length / 2));
+      const val = freq[idx] / 255;
+      const r = radius + val * 45 * masterInt;
+      const angle = (i / numPoints) * Math.PI * 2;
+      const x = cx + Math.cos(angle) * r;
+      const y = cy + Math.sin(angle) * r;
+      if (i === 0) vizCtx.moveTo(x, y);
+      else vizCtx.lineTo(x, y);
+    }
+    vizCtx.closePath();
+    vizCtx.stroke();
+    vizCtx.restore();
+  }
+
+  // 2. Sharp Line
+  if (document.getElementById('viz-line').checked && visualizerOpacity.line > 0) {
+    vizCtx.save();
+    vizCtx.globalAlpha = visualizerOpacity.line * masterInt;
+    vizCtx.strokeStyle = visualizerColor;
+    vizCtx.lineWidth = 2.5;
+
+    vizCtx.beginPath();
+    const sliceWidth = w / (freq.length / 2);
+    let x = 0;
+
+    for (let i = 0; i < freq.length / 2; i++) {
+      const v = freq[i] / 255.0;
+      const y = cy + (v - 0.5) * (h * 0.4) * masterInt;
+      if (i === 0) vizCtx.moveTo(x, y);
+      else vizCtx.lineTo(x, y);
+      x += sliceWidth;
+    }
+    vizCtx.stroke();
+    vizCtx.restore();
+  }
+
+  // 3. Spectrum Bars
+  if (document.getElementById('viz-bars').checked && visualizerOpacity.bars > 0) {
+    vizCtx.save();
+    vizCtx.globalAlpha = visualizerOpacity.bars * masterInt;
+    vizCtx.fillStyle = visualizerColor;
+
+    const numBars = 48;
+    const barWidth = (w / numBars) * 0.7;
+    const gap = (w / numBars) * 0.3;
+
+    for (let i = 0; i < numBars; i++) {
+      const val = freq[i * 2] / 255;
+      const barHeight = val * (h * 0.35) * masterInt;
+      const bx = i * (barWidth + gap) + gap / 2;
+      vizCtx.fillRect(bx, h - barHeight, barWidth, barHeight);
+    }
+    vizCtx.restore();
+  }
+
+  // 4. Particles
+  if (document.getElementById('viz-particles').checked && visualizerOpacity.particles > 0) {
+    vizCtx.save();
+    vizCtx.globalAlpha = visualizerOpacity.particles * masterInt;
+    vizCtx.fillStyle = visualizerColor;
+
+    if (particles.length < 80 && bassNorm > 0.3) {
+      for (let i = 0; i < 5; i++) {
+        particles.push({
+          x: cx,
+          y: cy,
+          vx: (Math.random() - 0.5) * 12 * (1 + bassNorm),
+          vy: (Math.random() - 0.5) * 12 * (1 + bassNorm),
+          size: Math.random() * 4 + 2,
+          life: 1.0
+        });
+      }
+    }
+
+    particles.forEach((p, idx) => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= 0.02;
+
+      if (p.life > 0) {
+        vizCtx.globalAlpha = p.life * visualizerOpacity.particles * masterInt;
+        vizCtx.beginPath();
+        vizCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        vizCtx.fill();
+      }
+    });
+    particles = particles.filter(p => p.life > 0);
+    vizCtx.restore();
+  }
+
+  // 5. Bass Pulse Orb
+  if (document.getElementById('viz-orb').checked && visualizerOpacity.orb > 0) {
+    vizCtx.save();
+    vizCtx.globalAlpha = visualizerOpacity.orb * masterInt;
+    const orbRadius = (30 + bassNorm * 60) * masterInt;
+
+    const grad = vizCtx.createRadialGradient(cx, cy, 5, cx, cy, orbRadius);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.4, visualizerColor);
+    grad.addColorStop(1, 'transparent');
+
+    vizCtx.fillStyle = grad;
+    vizCtx.beginPath();
+    vizCtx.arc(cx, cy, orbRadius, 0, Math.PI * 2);
+    vizCtx.fill();
+    vizCtx.restore();
+  }
+
+  // 6. Starfield Drive
+  if (document.getElementById('viz-starfield').checked && visualizerOpacity.starfield > 0) {
+    vizCtx.save();
+    vizCtx.fillStyle = visualizerColor;
+    const speed = 2 + bassNorm * 18;
+
+    starfield.forEach((s) => {
+      s.z -= speed;
+      if (s.z <= 0) s.z = w;
+
+      const sx = (s.x / s.z) * (w / 2) + cx;
+      const sy = (s.y / s.z) * (h / 2) + cy;
+      const size = Math.max(0.1, (1 - s.z / w) * 3.5);
+
+      if (sx >= 0 && sx < w && sy >= 0 && sy < h) {
+        vizCtx.globalAlpha = (1 - s.z / w) * visualizerOpacity.starfield * masterInt;
+        vizCtx.fillRect(sx, sy, size, size);
+      }
+    });
+    vizCtx.restore();
+  }
+
+  // 7. 3D Cyber Grid Horizon
+  if (document.getElementById('viz-cybergrid').checked && visualizerOpacity.cybergrid > 0) {
+    vizCtx.save();
+    vizCtx.globalAlpha = visualizerOpacity.cybergrid * masterInt;
+    vizCtx.strokeStyle = visualizerColor;
+    vizCtx.lineWidth = 1;
+
+    const horizon = h * 0.65;
+    const lines = 12;
+
+    for (let i = 0; i <= lines; i++) {
+      const px = (i / lines) * w;
+      vizCtx.beginPath();
+      vizCtx.moveTo(cx, horizon);
+      vizCtx.lineTo(px, h);
+      vizCtx.stroke();
+    }
+
+    const gridSpeed = (performance.now() * 0.05 * (1 + bassNorm * 2)) % 25;
+    for (let y = horizon; y < h; y += 18) {
+      const gy = y + gridSpeed;
+      if (gy < h) {
+        vizCtx.beginPath();
+        vizCtx.moveTo(0, gy);
+        vizCtx.lineTo(w, gy);
+        vizCtx.stroke();
+      }
+    }
+    vizCtx.restore();
+  }
+
+  // Draw rendered visualizers onto main stage canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(vizCanvas, 0, 0);
+}
+
+function animate() {
+  animFrameId = requestAnimationFrame(animate);
+
+  const now = performance.now();
+  const dt = (now - lastFrameTime) / 1000;
+  lastFrameTime = now;
+
+  let bassNorm = 0;
+
+  if (analyser && isPlaying) {
+    analyser.getByteFrequencyData(frequencyData);
+
+    // Calculate Bass Energy (bins 0-12)
+    let bassSum = 0;
+    const bassBins = 12;
+    for (let i = 0; i < bassBins; i++) {
+      bassSum += frequencyData[i];
+    }
+    bassAverage = bassSum / bassBins;
+    bassNorm = Math.min(1, bassAverage / 255);
+
+    const bassThreshold = parseFloat(sensSlider.value);
+    const holdTime = parseFloat(holdSlider.value);
+    const quietVal = parseFloat(quietSlider.value);
+
+    // Check beat sync cut triggers
+    if (bassAverage >= bassThreshold && bassAverage > quietVal) {
+      if ((now - lastBeatTime) / 1000 >= holdTime && !isNHeld) {
+        lastBeatTime = now;
+        beatCount++;
+
+        const barSyncVal = barSyncSelect.value;
+        if (barSyncVal !== 'off') {
+          const beatsRequired = parseInt(barSyncVal, 10);
+          if (beatCount % beatsRequired === 0) {
+            switchVideoClip();
+          }
+        } else {
+          switchVideoClip();
+        }
+      }
+    }
+
+    // Zoom Shake FX
+    if (chkZoom.checked && bassNorm > 0.4) {
+      const punchInt = parseFloat(zoomIntSlider.value) / 100;
+      zoomTargetScale = 1.0 + bassNorm * punchInt;
+    } else {
+      zoomTargetScale = 1.0;
+    }
+    zoomCurrentScale += (zoomTargetScale - zoomCurrentScale) * 0.15;
+    document.getElementById('video-container').style.transform = `scale(${zoomCurrentScale})`;
+
+    // Update Lyrics Synchronization
+    const currentTimeSec = isAuxActive ? (now - auxStartTime) / 1000 : audioEl.currentTime;
+    updateLyricsSync(currentTimeSec);
+  }
+
+  // Render procedural fallback backdrop if active video isn't ready
+  if (!activeVideo || activeVideo.readyState < 2 || activeVideo.paused) {
+    drawProceduralFallback(bassNorm);
+  } else {
+    checkClipLooping();
+  }
+
+  // Draw active visualizer layers
+  if (vizEnabled && frequencyData) {
+    drawVisualizers(frequencyData, bassNorm);
+  }
+}
+
+document.getElementById('audio-input').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files);
+  files.forEach(f => {
+    audioQueue.push({ name: f.name, file: f, url: URL.createObjectURL(f) });
+  });
+  renderAudioQueue();
+  if (audioQueue.length > 0 && !isPlaying) playAudioIndex(0);
+});
+
+document.getElementById('video-input').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files);
+  files.forEach((f, idx) => {
+    const clipObj = {
+      id: `vid_${Date.now()}_${idx}`,
+      name: f.name,
+      blob: f,
+      url: URL.createObjectURL(f),
+      enabled: true,
+      trimStart: 0,
+      trimEnd: 0
+    };
+    videoClips.push(clipObj);
+  });
+  renderClipList();
+  if (videoClips.length > 0 && (!currentClipObject || !activeVideo.src)) {
+    switchVideoClip();
+  }
+});
+
+function renderAudioQueue() {
+  const container = document.getElementById('audio-queue-list');
+  container.innerHTML = '';
+  audioQueue.forEach((item, idx) => {
+    const div = document.createElement('div');
+    div.className = `audio-item ${idx === currentAudioIndex ? 'active' : ''}`;
+    div.innerHTML = `
+      <div class="audio-info">
+        <span class="audio-name">${item.name}</span>
+      </div>
+      <button class="tag-btn" onclick="playAudioIndex(${idx})">PLAY</button>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function playAudioIndex(idx) {
+  if (idx < 0 || idx >= audioQueue.length) return;
+  currentAudioIndex = idx;
+  const item = audioQueue[idx];
+  audioEl.src = item.url;
+  audioEl.play().then(() => {
+    isPlaying = true;
+    startBtn.innerText = "PAUSE VISUALIZER [P]";
+    statusText.innerText = `Now Playing Track: ${item.name}`;
+  }).catch(() => {});
+  renderAudioQueue();
+}
+
+function renderClipList() {
+  const container = document.getElementById('clip-list');
+  container.innerHTML = '';
+  videoClips.forEach((clip, idx) => {
+    const div = document.createElement('div');
+    div.className = `clip-item ${clip.enabled === false ? 'disabled' : ''}`;
+    div.innerHTML = `
+      <div class="clip-info">
+        <span class="clip-name">${clip.name}</span>
+        <div class="clip-controls-inline">
+          <button class="clip-toggle-btn ${clip.enabled !== false ? 'enabled' : ''}" onclick="toggleClipEnable(${idx})">
+            ${clip.enabled !== false ? 'ENABLED' : 'DISABLED'}
+          </button>
+          <label style="font-size:0.6rem; margin:0;">Trim:</label>
+          <input type="number" class="trim-input" value="${clip.trimStart || 0}" step="0.5" placeholder="Start" onchange="updateClipTrim(${idx}, 'start', this.value)">
+          <input type="number" class="trim-input" value="${clip.trimEnd || 0}" step="0.5" placeholder="End" onchange="updateClipTrim(${idx}, 'end', this.value)">
+        </div>
+      </div>
+      <button class="btn-del-clip" onclick="deleteClip(${idx})">✕</button>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function toggleClipEnable(idx) {
+  if (videoClips[idx]) {
+    videoClips[idx].enabled = videoClips[idx].enabled === false ? true : false;
+    renderClipList();
+  }
+}
+
+function updateClipTrim(idx, type, val) {
+  if (videoClips[idx]) {
+    const num = parseFloat(val) || 0;
+    if (type === 'start') videoClips[idx].trimStart = num;
+    if (type === 'end') videoClips[idx].trimEnd = num;
+  }
+}
+
+function deleteClip(idx) {
+  videoClips.splice(idx, 1);
+  renderClipList();
+}
+
+function clearStorage() {
+  videoClips = [];
+  audioQueue = [];
+  audioEl.pause();
+  audioEl.src = '';
+  renderClipList();
+  renderAudioQueue();
+  statusText.innerText = "Storage and clip queues cleared.";
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+  const key = e.key.toLowerCase();
+  if (e.code === 'Space') {
+    e.preventDefault();
+    switchVideoClip();
+  } else if (key === 'p') {
+    togglePlay();
+  } else if (key === 'n') {
+    isNHeld = true;
+  } else if (key === 'l') {
+    advanceLyricsManual();
+  } else if (key === 'x') {
+    vizEnabled = !vizEnabled;
+  } else if (key === 'c') {
+    chkCrt.checked = !chkCrt.checked;
+    chkCrt.dispatchEvent(new Event('change'));
+  } else if (key === 'z') {
+    chkZoom.checked = !chkZoom.checked;
+  } else if (key === 't') {
+    tapBtn.click();
+  } else if (key === 'h') {
+    uiLayer.classList.toggle('hidden');
+  } else if (key === 'f') {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  if (e.key.toLowerCase() === 'n') isNHeld = false;
+});
+
+window.onload = function() {
+  setupOpacitySliders();
+  resizeCanvas();
+  parseLyricInput();
+  statusText.innerText = "Studio Ready. Upload videos or audio to start!";
+  animate();
+};
+</script>
+</body>
+</html>
+```
